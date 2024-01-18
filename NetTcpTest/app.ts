@@ -1,4 +1,5 @@
 //const net = require('net');
+import { Console } from 'console';
 import * as net from 'net';
 import { Buffer } from 'node:buffer';
 
@@ -37,9 +38,9 @@ const server = net.createServer((client:net.Socket) => {
     //console.log(`클라이언트로부터 수신된 데이터: ${data}`);
     const buf = Buffer.from(data);
     ReceiveData( buf );
-
-    console.log(`Buffer : ${JSON.stringify(buf)}, Len = ${buf.length}`);
-    client.write(data);
+    client.write(buf);
+    //console.log(`Buffer : ${JSON.stringify(buf)}, Len = ${buf.length}`);
+    //client.write(data);
   });
 
   // 클라이언트 연결이 종료되었을 때의 이벤트 핸들러
@@ -59,8 +60,14 @@ const server = net.createServer((client:net.Socket) => {
 });
 
 function ReceiveData( data : Buffer) {
-  let index : number = 0;
-  let id = data.readInt32BE(index);
+
+  let jData = data.toJSON();
+  if( jData.type != "Buffer" ) return;
+
+  console.log('jData = ', jData);
+
+  let id = data.readIntLE(0, 4);
+  console.log('id = ', id);
   switch( id ){
      case 10:
       Receive_Packet1( data );
@@ -71,17 +78,40 @@ function ReceiveData( data : Buffer) {
   }
 }
 
-function Receive_Packet1( data : Buffer){
-  let pdata = new PacketData();
-  let index : number = 0;
-  let id = data.readInt32BE(index);
-  console.log('id = ', id);
-  let name = data.toString('utf-8');
-  console.log('name = ', name);
-  console.log('data : ', JSON.stringify(data));
-  
+interface PacketA {
+  id : number;
+  name : string;
 }
+
+function Receive_Packet1( data : Buffer){
+ 
+  console.log('length = ', data.length);
+
+  let index : number = 0;
+  let id = data.readIntLE(index, 4);
+  
+  const nameBuf = Buffer.alloc(data.length-4);
+  data.copy(nameBuf, 0, 4, data.length);
+
+  console.log('nameBuf : ', JSON.stringify(nameBuf));
+  let name = nameBuf.toString('utf-8');
+  console.log('name = ', name);
+
+  let pdata = new PacketData(id, name);
+
+}
+
 function Receive_Packet2( data : Buffer){
+  console.log('length = ', data.length);
+
+  let index : number = 0;
+  let id = data.readIntLE(index, 4); index +=4;
+  let kor = data.readIntLE(index, 4); index +=4;
+  let mat = data.readIntLE(index, 4); index +=4;
+
+  let pdata = new PacketData2(id, kor, mat);
+   console.log("id = %d, %d, %d", id, kor, mat);
+
 
 }
 const PORT = 3000;
