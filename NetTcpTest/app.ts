@@ -11,6 +11,16 @@ class PacketData {
     this.name = name;
   }
 }
+class PacketData2 {
+  id : number;
+  kor : number;
+  mat : number;
+  constructor( id:number=0, kor:number = 0, mat:number = 0 ){
+    this.id = id;
+    this.kor = kor;
+    this.mat = mat;
+  }
+}
 
 //@ts-check
 const server = net.createServer((client:net.Socket) => {
@@ -26,11 +36,9 @@ const server = net.createServer((client:net.Socket) => {
     //socket.write(JSON.stringify(data));
     //console.log(`클라이언트로부터 수신된 데이터: ${data}`);
     const buf = Buffer.from(data);
+    ReceiveData( buf );
 
-    let pdata = new PacketData();
-    
     console.log(`Buffer : ${JSON.stringify(buf)}, Len = ${buf.length}`);
-    console.log(`클라이언트로부터 수신된 데이터: ${JSON.stringify(data)}`);
     client.write(data);
   });
 
@@ -50,6 +58,32 @@ const server = net.createServer((client:net.Socket) => {
 
 });
 
+function ReceiveData( data : Buffer) {
+  let index : number = 0;
+  let id = data.readInt32BE(index);
+  switch( id ){
+     case 10:
+      Receive_Packet1( data );
+      break;
+     case 20:
+      Receive_Packet2( data );
+      break;
+  }
+}
+
+function Receive_Packet1( data : Buffer){
+  let pdata = new PacketData();
+  let index : number = 0;
+  let id = data.readInt32BE(index);
+  console.log('id = ', id);
+  let name = data.toString('utf-8');
+  console.log('name = ', name);
+  console.log('data : ', JSON.stringify(data));
+  
+}
+function Receive_Packet2( data : Buffer){
+
+}
 const PORT = 3000;
 server.listen(PORT, () => {
   console.log(`TCP 서버가 포트 ${PORT}에서 실행 중입니다.`);
