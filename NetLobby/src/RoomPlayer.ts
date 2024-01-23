@@ -14,11 +14,11 @@
       this.userState = 0;       //0: ERoomUserSate.Empty(빈슬롯), 1: Enter(룸 입장상태), 2:Ready(게임시작 대기상태)
       this.slotNo = 0;          // 룸 슬롯 번호 , 슬롯번호는 1부터 시작한다.
       this.isAlive = true;      // 게임중에 살아있는지 여부
-      this.userInfo = new UserInfo("", "", "", "", 0, 0);       // UserInfo 유저 정보(ip, port)
+      this.userInfo = new UserInfo();       // UserInfo 유저 정보(ip, port)
     }
   
-    Id() : string { return this.userInfo.id;}
-    Name() : string { return this.userInfo.id; }
+    Id() : string { return this.userInfo.userId;}
+    Name() : string { return this.userInfo.userId; }
   }
 
   export default RoomPlayer;

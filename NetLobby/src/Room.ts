@@ -1,9 +1,9 @@
 "use strict"
 
 
-//import  io  from "socket.io";
-import { Socket } from "socket.io";
+
 //const RoomPlayer = require('./RoomPlayer')
+import net from 'net';
 import RoomPlayer from "./RoomPlayer"; 
 import UserInfo from "./UserInfo";
 
@@ -122,9 +122,9 @@ export class Room {
     }
   
     // 룸 나간 유저 브로드 캐스팅하기
-    async SendLeaveRoomPlayer( socket:Socket, userId:string ) {
-      await socket.broadcast.to(this.roomId).emit('notify_leave_room', {"id": userId} );
-    }
+     async SendLeaveRoomPlayer( socket:net.Socket, userId:string ) {
+       await socket.broadcast.to(this.roomId).emit('notify_leave_room', {"id": userId} );
+     }
 
     // 슬롯 0으로 초기화하기
     ClearSlot() : void {

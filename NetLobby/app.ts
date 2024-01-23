@@ -5,23 +5,29 @@
 // 1. cmd 창에서  curl ifconfig.me 또는 curl ipinfo.io
 // 2. 크롬에서 "What is my IP"로 검색
 
+import * as net from 'net'; 
+import { Buffer } from 'node:buffer';
 
-import express from 'express';
-import http from 'http';
-import { Server, Socket } from 'socket.io';
-import * as socketIO from 'socket.io';
+// import express from 'express';
+// import http from 'http';
+// import { Server, Socket } from 'socket.io';
+// import * as socketIO from 'socket.io';
 
-const app = express();
-const server = http.createServer(app);
-const io = new Server(server, {
-            pingTimeout : 10000,    // 핑 연결이 실패후 30초 후 연결 해제한다.
-            //pingInterval: 5000     // 20초 간격으로 핑을 보낸다.
-          });
+// const app = express();
+// const server = http.createServer(app);
+// const io = new Server(server, {
+//             pingTimeout : 10000,    // 핑 연결이 실패후 30초 후 연결 해제한다.
+//             //pingInterval: 5000     // 20초 간격으로 핑을 보낸다.
+//           });
 
 import { Lobby } from './src/Lobby';
 
+const HEADER_SIZE = 5;  // PID(2), ID(2), SIZE(2), CHECKSUM(1)
 
-const mLobby = new Lobby();        // 로비
+const mLobby = new Lobby();         // 로비
+const mClients:net.Socket[] = [];   // 클라이언트(소캣)리스트
+//const _PID:number = 0x7e21;          // 프리픽스 ID 값 : ~, !
+
 
 // 로비에서 처리할 일 1 
 // - 계정생성
@@ -43,15 +49,133 @@ const mLobby = new Lobby();        // 로비
 // - 그룹(방) 파괴
 
 
-io.use((socket:Socket, next) => {
-  if (socket.handshake.query.token === "UNITY") {
-      next();
-  } else {
-      next(new Error("Authentication error"));
-  }
-});
+// io.use((socket:Socket, next) => {
+//   if (socket.handshake.query.token === "UNITY") {
+//       next();
+//   } else {
+//       next(new Error("Authentication error"));
+//   }
+// });
+
 
 Init_UserData();
+
+const server = net.createServer((client:net.Socket) => {
+  console.log('클라이언트가 연결되었습니다.');
+  console.log('   local = %s:%s', client.localAddress, client.localPort);
+  console.log('   remote = %s:%s', client.remoteAddress, client.remotePort);
+    
+  const addr = client.address();
+  console.log(`클라이언트가 연결되었습니다. 주소: ${JSON.stringify(addr)}`);
+
+  mClients.push(client);
+
+  // 클라이언트로부터 데이터를 수신하는 이벤트 핸들러
+  client.on('data', (data:Buffer) => {
+    ReceiveData( data );
+  });
+  
+  // 5초 간격으로 핑 보내기
+  let intervalID = setInterval(() => {
+    client.write('ping');
+  }, 5000); // 5초
+
+  // 클라이언트 연결이 종료되었을 때의 이벤트 핸들러
+  client.on('end', () => {
+    console.log('클라이언트와의 연결이 종료되었습니다.');
+
+    // Remove client from socket array
+    let index = mClients.indexOf(client);
+    if ( index != -1)
+      mClients.splice(index, 1);
+
+    client.end();
+    client.destroy();
+  });
+
+  // 소켓 에러 처리
+  client.on('error', (err:Error) => {
+    console.log('Socket Error: ', JSON.stringify(err));
+    console.log('Socket Error: ', err);
+    client.end();
+    client.destroy();
+  });
+
+
+  // 클라이언트에게 데이터를 브로드캐스트
+  function Broadcast( data:Buffer) {
+    server.getConnections((err, count) => {
+      console.log(`현재 연결된 클라이언트 수: ${count}`);
+    });
+
+    mClients.forEach((client1) => {
+      if (client !== client1 && client1.writable) {
+        client1.write(data);
+      }
+    });
+  }
+
+
+});
+
+mLobby.mServer = server;
+mLobby.mClients = mClients;
+
+
+function ReceiveData( data:Buffer ) {
+  //let jData = data.toJSON();
+  //if( jData.type != "Buffer" ) return;
+
+  //console.log('jData = ', jData);
+
+  let idx = 0;
+  let pid = data.readIntLE(idx, 2); idx+=2;
+  let id = data.readIntLE(idx, 2);  idx+=2;
+  let size = data.readIntLE(idx, 2); idx+=2;
+  
+  if( pid != _PID ) {
+    console.log('Wrong Packet... PID = ', pid);
+    return;
+  }
+
+  // 패킷 사이즈 검사 및 체크섬 검사를 하면 좀더 안정정이다.
+
+  console.log('id = %d, length = %d', id, data.length);
+  switch( id ){
+     case :
+      Receive_Packet1( data );
+      break;
+     case 20:
+      Receive_Packet2( data );
+      break;
+  }
+}
+
+
+// 클라이언트에게 데이터를 브로드캐스트
+export function Broadcast( client:net.Socket, data:Buffer) {
+    server.getConnections((err, count) => {
+      console.log(`현재 연결된 클라이언트 수: ${count}`);
+    });
+
+    mClients.forEach((client1) => {
+      if (client !== client1 && client1.writable) {
+        client1.write(data);
+      }
+    });
+}
+
+
+  
+
+
+const port =  process.env.PORT || 19000;
+server.listen(port, ()=>{
+    console.log(`서버 가동 (Port) - ${port}`);
+});
+
+//export default server;
+
 
 io.on('connection', async (socket:Socket) => {
     //content
@@ -150,10 +274,10 @@ function Init_UserData() {
   mLobby.Init_UserData();
 }
 
-const port =  process.env.PORT || 19000;
-server.listen(port, ()=>{
-    console.log(`서버 가동 (Port) - ${port}`);
-});
+// const port =  process.env.PORT || 19000;
+// server.listen(port, ()=>{
+//     console.log(`서버 가동 (Port) - ${port}`);
+// });
 
 // const port =  19000;
 // const externalIP = "0.0.0.0";
@@ -161,22 +285,3 @@ server.listen(port, ()=>{
 //     console.log(`서버 가동 (IP/Port) - ${externalIP} : ${port}`);
 // });
 
-// io.listen(port);
-// console.log('listening on *:' + port);
-
-export default app;
-
-// // 저장 유저리스트를 필드별 얻기 ------------------
-// const getSaveUser = ( isAll, ...fields )=>{
-//   if( isAll ) 
-//     return storage;
-
-//    const newUsers = fields.reduce(( newUsers, field) =>{
-//       if( storage.hasOwnProperty(field)) {
-//         newUsers[field] = storage[field];
-//       }
-//       return newUsers;
-//    }, {});
-
-//    return newUsers; 
-// };
