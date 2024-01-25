@@ -66,23 +66,58 @@ export class Lobby {
     }
 
     // 클라이언트에게 데이터를 브로드캐스트
-   Broadcast<T>( client:net.Socket, data:Buffer) {
-    if( this.mServer != undefined ) {
-        this.mServer.getConnections((err, count) => {
-            console.log(`현재 연결된 클라이언트 수: ${count}`);
+    Broadcast<T>( client:net.Socket, data:Buffer) {
+        if( this.mServer != undefined ) {
+            this.mServer.getConnections((err, count) => {
+                console.log(`현재 연결된 클라이언트 수: ${count}`);
+            });
+        }
+        this.mClients.forEach((socket) => {
+            if (client !== socket && socket.writable) {
+                socket.write(data);
+            }
         });
     }
+    
+    Receive_CreateId( cleint:net.Socket, data : Buffer) {
 
-    this.mClients.forEach((socket) => {
-      if (client !== socket && socket.writable) {
-        socket.write(data);
-      }
-    });
-  }
-   
-  
+    }
+    Receive_Login(  cleint:net.Socket, data : Buffer) {
+    }
+    Receive_Logout(  cleint:net.Socket, data : Buffer) {
+    }
+    Receive_UserInfo(  cleint:net.Socket, data : Buffer) {
+    }  
+    Receive_Withdraw(  cleint:net.Socket, data : Buffer) {
+    }
+    Receive_InitRoomList(  cleint:net.Socket, data : Buffer) {
 
-    // 계정생성 응답 -----------------------------------------
+    }
+    Receive_CreateRoom(  cleint:net.Socket, data : Buffer) {
+
+    }
+    Receive_JoinRoom( cleint:net.Socket,  data : Buffer) {
+
+    }
+    Receive_RoomReady(  cleint:net.Socket, data : Buffer) {
+
+    }
+    Receive_LeaveRoom( cleint:net.Socket,  data : Buffer) {
+
+    }
+    Receive_RoomChat(  cleint:net.Socket, data : Buffer) {
+
+    }
+    Receive_GameStart( cleint:net.Socket,  data : Buffer) {
+
+    }
+    Receive_GameEnd(  cleint:net.Socket, data : Buffer) {
+
+    }
+    
+}
+
+// 계정생성 응답 -----------------------------------------
     Ack_CreateId =(socket:net.Socket, id:string, pass:string )=>{
         const resUser = storage.FindUserData(id);
         if( resUser != undefined ){

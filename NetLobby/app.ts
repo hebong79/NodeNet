@@ -21,6 +21,7 @@ import { Buffer } from 'node:buffer';
 //           });
 
 import { Lobby } from './src/Lobby';
+import * as Packets from './src/PacketDatas';
 
 const HEADER_SIZE = 5;  // PID(2), ID(2), SIZE(2), CHECKSUM(1)
 
@@ -114,42 +115,72 @@ const server = net.createServer((client:net.Socket) => {
       }
     });
   }
-
+ 
+  // 데이터 리시브 
+  function ReceiveData( data:Buffer ) {
+    //let jData = data.toJSON();
+    //console.log('jData = ', jData);
+  
+    let idx = 0;
+    let pid = data.readIntLE(idx, 2); idx+=2;
+    let id = data.readIntLE(idx, 2);  idx+=2;
+    let size = data.readIntLE(idx, 2); idx+=2;
+    
+    // PID 검사
+    if( pid != Packets._PID ) {
+      console.log('Wrong Packet... PID = ', pid);
+      return;
+    }
+  
+    // 패킷 사이즈 검사 및 체크섬 검사를 하면 좀더 안정정이다.
+    console.log('id = %d, length = %d', id, data.length);
+    switch( id ) {
+      case Packets.EPacket.Req_createId:
+        mLobby.Receive_CreateId(client, data );
+        break;
+      case Packets.EPacket.Req_login:
+        mLobby.Receive_Login( client, data );
+        break;
+      case Packets.EPacket.Req_logout:
+        mLobby.Receive_Logout( client, data );
+        break;
+      case Packets.EPacket.Req_userInfo:
+        mLobby.Receive_UserInfo( client, data );
+        break;
+      case Packets.EPacket.Req_withdraw:
+        mLobby.Receive_Withdraw( client, data );
+        break;
+      case Packets.EPacket.Req_init_roomlist:
+        mLobby.Receive_InitRoomList( client, data );
+        break;
+      case Packets.EPacket.Req_create_room:
+        mLobby.Receive_CreateRoom( client, data );
+        break;   
+      case Packets.EPacket.Req_join_room:
+        mLobby.Receive_JoinRoom( client, data );
+        break;             
+      case Packets.EPacket.Req_leave_room:
+        mLobby.Receive_LeaveRoom( client, data );
+        break;     
+      case Packets.EPacket.Req_room_ready:
+        mLobby.Receive_RoomReady( client, data );
+        break;     
+      case Packets.EPacket.Req_room_chat:
+        mLobby.Receive_RoomChat( client, data );
+        break;     
+      case Packets.EPacket.Req_game_start:
+        mLobby.Receive_GameStart( client, data );
+        break;     
+      case Packets.EPacket.Req_game_end:
+        mLobby.Receive_GameEnd( client, data );
+        break;     
+    }
+  }
 
 });
 
 mLobby.mServer = server;
 mLobby.mClients = mClients;
-
-
-function ReceiveData( data:Buffer ) {
-  //let jData = data.toJSON();
-  //if( jData.type != "Buffer" ) return;
-
-  //console.log('jData = ', jData);
-
-  let idx = 0;
-  let pid = data.readIntLE(idx, 2); idx+=2;
-  let id = data.readIntLE(idx, 2);  idx+=2;
-  let size = data.readIntLE(idx, 2); idx+=2;
-  
-  if( pid != _PID ) {
-    console.log('Wrong Packet... PID = ', pid);
-    return;
-  }
-
-  // 패킷 사이즈 검사 및 체크섬 검사를 하면 좀더 안정정이다.
-
-  console.log('id = %d, length = %d', id, data.length);
-  switch( id ){
-     case :
-      Receive_Packet1( data );
-      break;
-     case 20:
-      Receive_Packet2( data );
-      break;
-  }
-}
 
 
 // 클라이언트에게 데이터를 브로드캐스트
@@ -164,8 +195,6 @@ export function Broadcast( client:net.Socket, data:Buffer) {
       }
     });
 }
-
-
   
 
 

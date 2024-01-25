@@ -51,22 +51,26 @@ export enum EPacket {
    Req_game_end,              // 게임종료 요쳥
    Ack_game_end,              // 게임종료 응답
    Notify_game_end,           // 게임종료 통지
+   Req_disconnect,            // 연결해제 요청
+   Ack_disconnect             // 연결해제 응답
 }
 
 export const _PID:number = 0x7e21;          // 프리픽스 ID 값 : ~, !
 
 // 기본비교 PrefixId(2), id(2), length(2), checksum(1)
-// length 는 헤더를 제외한 실제 데이터 길이 ( 5byte 제외된 크기 ) 
-// Packet 길이 :  PrefixId(2) + id(2) + length(2) + 실제 data length + checksum(1) = 총길이 : 5 + data길이
+// length 는 헤더를 제외한 실제 데이터 길이 ( 7byte 제외된 크기 ) 
+// Packet 길이 :  PrefixId(2) + id(2) + length(2) + 실제 data length + checksum(1) = 총길이 : 7 + data길이
 export class PacketBase {
-   pid : number;        // Prefix ID
-   id : number;         // Packet ID
-   size : number;       // Packet Size
+   pid : number;        // Prefix ID ( 2 )
+   id : number;         // Packet ID ( 2 )
+   size : number;       // Packet Size ( 2 )
+   cheksum: number;     // 체크섬 ( 1 )
 
    constructor(id:number) {
       this.pid = _PID;
       this.id = id;
       this.size = 0;
+      this.cheksum = 0;
    }
 }
 
