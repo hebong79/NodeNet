@@ -65,14 +65,14 @@ class RefIdx {
   }
 }
 
-// 기본비교 PrefixId(2), id(2), length(2), checksum(1)
-// length 는 헤더를 제외한 실제 데이터 길이 ( 7byte 제외된 크기 )
+// 기본비교 PrefixId(2), id(2), size(2), checksum(1)
+// size 는 헤더를 제외한 실제 데이터 길이 ( 7byte 제외된 크기 )
 // Packet 길이 :  PrefixId(2) + id(2) + length(2) + 실제 data length + checksum(1) = 총길이 : 7 + data길이
 export class PacketBase {
-  pid: number; // Prefix ID ( 2 )
+  pid: number; // Prefix ID ( 2 ) - Packet 인지 확인용
   id: number; // Packet ID ( 2 )
-  size: number; // Packet Size ( 2 )
-  cheksum: number; // 체크섬 ( 1 )
+  size: number; // Packet Size ( 2 ) - 패킷 크기( 실제 Body 사이즈 - 헤더(7) 제외된 크기)
+  cheksum: number; // 체크섬 ( 1 ) - 정상적인 패킷인지 확이을 위한값
 
   constructor(id: number) {
     this.pid = _PID;
@@ -84,6 +84,11 @@ export class PacketBase {
   // 실제 data Buffer의 시작 인덱스
   getBodyIndex(): number {
     return 6;
+  }
+
+  // 체크섬 포함한 헤더 크기
+  getHeaderSize(): number {
+    return 7;
   }
 
   // 버퍼로 부터 문자열 읽기
@@ -105,6 +110,18 @@ export class PacketBase {
     index += strSize;
     return index;
   }
+  // 헤더부분 Send data
+  // 다음버퍼 시작 index를 리턴한다.
+  SendDataHeader(data: Buffer): number {
+    let index = 0;
+    data.writeInt16LE(this.pid, index);
+    index += 2;
+    data.writeInt16LE(this.id, index);
+    index += 2;
+    data.writeInt16LE(this.size, index);
+    index += 2;
+    return index;
+  }
 }
 
 // 유저 리스트
@@ -124,18 +141,24 @@ export class SReqCreateId extends PacketBase {
     this.userId = uesrId;
     this.success = success;
   }
+  // 패킷 크기
+  PacketSize(): number {
+    let strSize = Buffer.byteLength(this.userId, 'utf-8');
+    return this.getHeaderSize() + 2 + strSize + 4;
+  }
   ReceiveData(data: Buffer) {
     let index = this.getBodyIndex();
-
     let rIdx = new RefIdx(index);
     this.userId = this.readString(data, rIdx);
     this.success = data.readIntLE(rIdx.value, 4);
   }
-  SendData(data: Buffer, index: number = 0) {
-    if (index == 0) index = this.getBodyIndex();
-
+  // 보내기 데이타 처리
+  SendData(): Buffer {
+    let data = Buffer.alloc(this.PacketSize());
+    let index = this.SendDataHeader(data);
     this.writeString(data, this.userId, index);
     data.writeIntLE(this.success, index, 4);
+    return data;
   }
 }
 // 계정생성 응답
@@ -148,6 +171,13 @@ export class SAckCreateId extends PacketBase {
     this.userId = uesrId;
     this.success = success;
   }
+
+  // 패킷 크기
+  PacketSize(): number {
+    let strSize = Buffer.byteLength(this.userId, 'utf-8');
+    return this.getHeaderSize() + 2 + strSize + 4;
+  }
+  // 받은 데이타 처리
   ReceiveData(data: Buffer) {
     let index = this.getBodyIndex();
 
@@ -155,13 +185,16 @@ export class SAckCreateId extends PacketBase {
     this.userId = this.readString(data, rIdx);
     this.success = data.readIntLE(rIdx.value, 4);
   }
-  SendData(data: Buffer, index: number = 0) {
-    if (index == 0) index = this.getBodyIndex();
-
+  // 보내기 데이타 처리
+  SendData(): Buffer {
+    let data = Buffer.alloc(this.PacketSize());
+    let index = this.SendDataHeader(data);
     this.writeString(data, this.userId, index);
     data.writeIntLE(this.success, index, 4);
+    return data;
   }
 }
+
 // 로그인 요청
 export class SReqLogin extends PacketBase {
   userId: string;

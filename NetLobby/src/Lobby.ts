@@ -81,6 +81,30 @@ export class Lobby {
     
     Receive_CreateId( cleint:net.Socket, data : Buffer) {
 
+        let kData = new PacketDatas.SReqCreateId();
+        kData.ReceiveData(data);
+
+        const resUser = storage.FindUserData(kData.userId);
+        if( resUser != undefined ){
+
+            let kPacket = new PacketDatas.SAckCreateId(kData.userId, 1);
+            kPacket.SendData();
+
+            const packet = {'id':id, 'success': 1, 'socketId':socket.id};   // 이미 가입된 유저임
+            cleint.emit("ack_create_id", packet);
+            return;
+        }
+        //유저정보 추가
+        storage.PushData(id, pass);
+        
+        // 파일 저장
+        storage.SaveFile();
+    
+        console.log('<create_id>\n', storage);
+        const nRes = 0;
+        const packet = {'id':id, 'success': nRes, 'socketId':socket.id};  // 정상 가입됨
+        socket.emit("ack_create_id", packet);   
+
     }
     Receive_Login(  cleint:net.Socket, data : Buffer) {
     }
@@ -114,7 +138,9 @@ export class Lobby {
     Receive_GameEnd(  cleint:net.Socket, data : Buffer) {
 
     }
-    
+    Receive_Disconnect(  cleint:net.Socket, data : Buffer) {
+
+    }
 }
 
 // 계정생성 응답 -----------------------------------------

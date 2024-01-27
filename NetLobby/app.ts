@@ -202,104 +202,104 @@ server.listen(port, () => {
 
 //export default server;
 
-io.on('connection', async (socket: Socket) => {
-  //content
-  const req = socket.request;
-  const ip = req.headers['x-forwarded-for'] || req.connection.remoteAddress;
-  console.log(
-    `<connection> 클라이언트 접속, socket id = ${socket.id},  ip = ${ip}`
-  );
+// io.on('connection', async (socket: Socket) => {
+//   //content
+//   const req = socket.request;
+//   const ip = req.headers['x-forwarded-for'] || req.connection.remoteAddress;
+//   console.log(
+//     `<connection> 클라이언트 접속, socket id = ${socket.id},  ip = ${ip}`
+//   );
 
-  // 5초 간격으로 핑 보내기
-  let intervalID = setInterval(() => {
-    socket.emit('ping');
-  }, 5000); // 5초
+//   // 5초 간격으로 핑 보내기
+//   let intervalID = setInterval(() => {
+//     socket.emit('ping');
+//   }, 5000); // 5초
 
-  // 계정 생성 응답-------------------------
-  socket.on('req_create_id', (id: string, pass: string) => {
-    mLobby.Ack_CreateId(socket, id, pass);
-  });
+//   // 계정 생성 응답-------------------------
+//   socket.on('req_create_id', (id: string, pass: string) => {
+//     mLobby.Ack_CreateId(socket, id, pass);
+//   });
 
-  // Login 응답 -------------------------
-  socket.on('req_login', (id: string, pass: string) => {
-    mLobby.Ack_Login(socket, id, pass);
-  });
+//   // Login 응답 -------------------------
+//   socket.on('req_login', (id: string, pass: string) => {
+//     mLobby.Ack_Login(socket, id, pass);
+//   });
 
-  // 유저정보 받아서 다른유저에게 브로드캐스팅하기 ----
-  socket.on('req_user_info', (data: string) => {
-    mLobby.Ack_LobyUserInfo(socket, data);
-  });
+//   // 유저정보 받아서 다른유저에게 브로드캐스팅하기 ----
+//   socket.on('req_user_info', (data: string) => {
+//     mLobby.Ack_LobyUserInfo(socket, data);
+//   });
 
-  // logout 응답 -------------------------
-  socket.on('req_logout', (id) => {
-    clearInterval(intervalID);
-    mLobby.Ack_Logout(socket, id);
-  });
+//   // logout 응답 -------------------------
+//   socket.on('req_logout', (id) => {
+//     clearInterval(intervalID);
+//     mLobby.Ack_Logout(socket, id);
+//   });
 
-  // 가입 탈퇴 응답 -------------------------
-  socket.on('req_withdraw', (id) => {
-    mLobby.Ack_Withdraw(socket, id);
-  });
+//   // 가입 탈퇴 응답 -------------------------
+//   socket.on('req_withdraw', (id) => {
+//     mLobby.Ack_Withdraw(socket, id);
+//   });
 
-  // 가입 탈퇴 응답 -------------------------
-  socket.on('req_lobby_chat', (id, msg) => {
-    mLobby.Ack_LobbyChat(socket, id, msg);
-  });
+//   // 가입 탈퇴 응답 -------------------------
+//   socket.on('req_lobby_chat', (id, msg) => {
+//     mLobby.Ack_LobbyChat(socket, id, msg);
+//   });
 
-  // 로그인 성공시 룸리스트가 요청된다.--------
-  socket.on('req_init_roomlist', (userId) => {
-    mLobby.Ack_InitRoomList(socket, userId);
-  });
+//   // 로그인 성공시 룸리스트가 요청된다.--------
+//   socket.on('req_init_roomlist', (userId) => {
+//     mLobby.Ack_InitRoomList(socket, userId);
+//   });
 
-  // 룸 생성 응답 -------------------------
-  socket.on('req_create_room', (roomName, userId) => {
-    mLobby.Ack_CreateRoom(socket, roomName, userId);
-  });
+//   // 룸 생성 응답 -------------------------
+//   socket.on('req_create_room', (roomName, userId) => {
+//     mLobby.Ack_CreateRoom(socket, roomName, userId);
+//   });
 
-  socket.on('req_join_room', (roomName: string, userId: string) => {
-    mLobby.Ack_JoinRoom(socket, roomName, userId);
-  });
+//   socket.on('req_join_room', (roomName: string, userId: string) => {
+//     mLobby.Ack_JoinRoom(socket, roomName, userId);
+//   });
 
-  // 룰 나가기 응답 -------------------------
-  socket.on('req_leave_room', (roomName: string, userId: string) => {
-    mLobby.Ack_LeaveRoom(socket, roomName, userId);
-  });
+//   // 룰 나가기 응답 -------------------------
+//   socket.on('req_leave_room', (roomName: string, userId: string) => {
+//     mLobby.Ack_LeaveRoom(socket, roomName, userId);
+//   });
 
-  socket.on(
-    'req_room_ready',
-    (roomName: string, userId: string, userState: number) => {
-      mLobby.Ack_RoomUserReady(socket, roomName, userId, userState);
-    }
-  );
+//   socket.on(
+//     'req_room_ready',
+//     (roomName: string, userId: string, userState: number) => {
+//       mLobby.Ack_RoomUserReady(socket, roomName, userId, userState);
+//     }
+//   );
 
-  socket.on(
-    'req_room_chat',
-    (roomName: string, userId: string, msg: string) => {
-      mLobby.Ack_RoomChat(socket, roomName, userId, msg);
-    }
-  );
+//   socket.on(
+//     'req_room_chat',
+//     (roomName: string, userId: string, msg: string) => {
+//       mLobby.Ack_RoomChat(socket, roomName, userId, msg);
+//     }
+//   );
 
-  // 방장이 Game start 눌렀을때 응답 ----------
-  socket.on('req_game_start', (roomName: string, userId: string) => {
-    mLobby.Ack_GameStart(socket, roomName, userId);
-  });
+//   // 방장이 Game start 눌렀을때 응답 ----------
+//   socket.on('req_game_start', (roomName: string, userId: string) => {
+//     mLobby.Ack_GameStart(socket, roomName, userId);
+//   });
 
-  // Game 종료 응답 (방의 모든 유저가 죽었을 때 ) ----------
-  socket.on('req_game_end', (roomName: string, userId: string) => {
-    mLobby.Ack_GameEnd(socket, roomName, userId);
-  });
+//   // Game 종료 응답 (방의 모든 유저가 죽었을 때 ) ----------
+//   socket.on('req_game_end', (roomName: string, userId: string) => {
+//     mLobby.Ack_GameEnd(socket, roomName, userId);
+//   });
 
-  // 필요없음... 서버에서 클라이언트로 ping을 엔진에서 보낸다.
-  //  socket.on('ping', (time)=>{
-  //     console.log(`.. : ${time}`);
-  //  });
+//   // 필요없음... 서버에서 클라이언트로 ping을 엔진에서 보낸다.
+//   //  socket.on('ping', (time)=>{
+//   //     console.log(`.. : ${time}`);
+//   //  });
 
-  // 연결 종료 시 -------------------------
-  socket.on('disconnect', async () => {
-    clearInterval(intervalID);
-    mLobby.Ack_Disconnect(socket);
-  });
-});
+//   // 연결 종료 시 -------------------------
+//   socket.on('disconnect', async () => {
+//     clearInterval(intervalID);
+//     mLobby.Ack_Disconnect(socket);
+//   });
+// });
 
 // 유저 데이타 초기화 하기 ( 가입유저 파일에서 열기 ) -----------
 function Init_UserData() {
