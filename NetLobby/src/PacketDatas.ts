@@ -65,6 +65,29 @@ class RefIdx {
   }
 }
 
+export class CPacket {
+  // 버퍼로 부터 문자열 읽기
+  // 반환값 : 문자열, 버퍼를 읽을 다음 인덱스
+  static readString(data: Buffer, index: RefIdx): string {
+    let strSize = data.readIntLE(index.value, 2);
+    index.value += 2;
+    const strBuf = Buffer.alloc(strSize);
+    data.copy(strBuf, 0, index.value, index.value + strSize);
+    let str = strBuf.toString('utf-8');
+    return str;
+  }
+  // 버퍼에 문자열 쓰기
+  // 반환값: 버퍼에 쓸 다음 인덱스
+  static writeString(data: Buffer, str: string, index: RefIdx): number {
+    let strSize = Buffer.byteLength(str, 'utf-8');
+    data.writeInt16LE(strSize, index.value);
+    index.value += 2;
+    data.write(str, 'utf-8');
+    index.value += strSize;
+    return index.value;
+  }
+}
+
 // 기본비교 PrefixId(2), id(2), size(2), checksum(1)
 // size 는 헤더를 제외한 실제 데이터 길이 ( 7byte 제외된 크기 )
 // Packet 길이 :  PrefixId(2) + id(2) + length(2) + 실제 data length + checksum(1) = 총길이 : 7 + data길이
@@ -101,14 +124,15 @@ export class PacketBase {
     let str = strBuf.toString('utf-8');
     return str;
   }
-
-  writeString(data: Buffer, str: string, index: number): number {
+  // 버퍼에 문자열 쓰기
+  // 반환값: 버퍼에 쓸 다음 인덱스
+  writeString(data: Buffer, str: string, index: RefIdx): number {
     let strSize = Buffer.byteLength(str, 'utf-8');
-    data.writeInt16LE(strSize, index);
-    index += 2;
+    data.writeInt16LE(strSize, index.value);
+    index.value += 2;
     data.write(str, 'utf-8');
-    index += strSize;
-    return index;
+    index.value += strSize;
+    return index.value;
   }
   // 헤더부분 Send data
   // 다음버퍼 시작 index를 리턴한다.
@@ -121,6 +145,44 @@ export class PacketBase {
     data.writeInt16LE(this.size, index);
     index += 2;
     return index;
+  }
+}
+
+// UserInfo에 통신 함수만 추가한 클래스
+export class SOUser extends UserInfo {
+  constructor() {
+    super();
+  }
+  // 패킷 크기
+  PacketSize(): number {
+    let lenUserId = Buffer.byteLength(this.userId, 'utf-8');
+    let lenIp = Buffer.byteLength(this.ip, 'utf-8');
+    let lenPublicIp = Buffer.byteLength(this.publicIp, 'utf-8');
+    return lenUserId + 2 + lenIp + 2 + lenPublicIp + 2 + 4 + 4;
+  }
+
+  ReceiveData(data: Buffer, rIdx: RefIdx): void {
+    this.userId = CPacket.readString(data, rIdx);
+    this.ip = CPacket.readString(data, rIdx);
+    this.publicIp = CPacket.readString(data, rIdx);
+    this.dataPort = data.readIntLE(rIdx.value, 4);
+    rIdx.value += 4;
+    this.movePort = data.readIntLE(rIdx.value, 4);
+  }
+
+  SendData(data: Buffer, rIdx: RefIdx): void {
+    CPacket.writeString(data, this.userId, rIdx);
+    CPacket.writeString(data, this.ip, rIdx);
+    CPacket.writeString(data, this.publicIp, rIdx);
+    data.writeIntLE(this.dataPort, rIdx.value, 4);
+    rIdx.value += 4;
+    data.writeIntLE(this.movePort, rIdx.value, 4);
+  }
+}
+
+export class SORoom extends Room {
+  constructor() {
+    super();
   }
 }
 
@@ -156,8 +218,9 @@ export class SReqCreateId extends PacketBase {
   SendData(): Buffer {
     let data = Buffer.alloc(this.PacketSize());
     let index = this.SendDataHeader(data);
-    this.writeString(data, this.userId, index);
-    data.writeIntLE(this.success, index, 4);
+    let rIdx = new RefIdx(index);
+    this.writeString(data, this.userId, rIdx);
+    data.writeIntLE(this.success, rIdx.value, 4);
     return data;
   }
 }
@@ -189,8 +252,9 @@ export class SAckCreateId extends PacketBase {
   SendData(): Buffer {
     let data = Buffer.alloc(this.PacketSize());
     let index = this.SendDataHeader(data);
-    this.writeString(data, this.userId, index);
-    data.writeIntLE(this.success, index, 4);
+    let rIdx = new RefIdx(index);
+    this.writeString(data, this.userId, rIdx);
+    data.writeIntLE(this.success, rIdx.value, 4);
     return data;
   }
 }
@@ -204,18 +268,26 @@ export class SReqLogin extends PacketBase {
     this.userId = userId;
     this.pass = pass;
   }
+  // 패킷 크기
+  PacketSize(): number {
+    let strSize = Buffer.byteLength(this.userId, 'utf-8');
+    let strSize2 = Buffer.byteLength(this.pass, 'utf-8');
+    return this.getHeaderSize() + 2 + strSize + 2 + strSize2;
+  }
+
   ReceiveData(data: Buffer) {
     let index = this.getBodyIndex();
-
     let rIdx = new RefIdx(index);
     this.userId = this.readString(data, rIdx);
     this.pass = this.readString(data, rIdx);
   }
-  SendData(data: Buffer, index: number = 0) {
-    if (index == 0) index = this.getBodyIndex();
-
-    this.writeString(data, this.userId, index);
-    this.writeString(data, this.pass, index);
+  SendData(): Buffer {
+    let data = Buffer.alloc(this.PacketSize());
+    let index = this.SendDataHeader(data);
+    let rIdx = new RefIdx(index);
+    this.writeString(data, this.userId, rIdx);
+    this.writeString(data, this.pass, rIdx);
+    return data;
   }
 }
 // 로그인 응답
@@ -227,6 +299,11 @@ export class SAckLogin extends PacketBase {
     this.userId = userId;
     this.success = success;
   }
+  // 패킷 크기
+  PacketSize(): number {
+    let strSize = Buffer.byteLength(this.userId, 'utf-8');
+    return this.getHeaderSize() + 2 + strSize + 4;
+  }
   ReceiveData(data: Buffer) {
     let index = this.getBodyIndex();
 
@@ -234,11 +311,13 @@ export class SAckLogin extends PacketBase {
     this.userId = this.readString(data, rIdx);
     this.success = data.readIntLE(rIdx.value, 4);
   }
-  SendData(data: Buffer, index: number = 0) {
-    if (index == 0) index = this.getBodyIndex();
-
-    this.writeString(data, this.userId, index);
-    data.writeIntLE(this.success, index, 4);
+  SendData(): Buffer {
+    let data = Buffer.alloc(this.PacketSize());
+    let index = this.SendDataHeader(data);
+    let rIdx = new RefIdx(index);
+    this.writeString(data, this.userId, rIdx);
+    data.writeIntLE(this.success, rIdx.value, 4);
+    return data;
   }
 }
 // 로그아웃 요청
@@ -248,16 +327,23 @@ export class SReqLogout extends PacketBase {
     super(EPacket.Req_logout);
     this.userId = userId;
   }
+  // 패킷 크기
+  PacketSize(): number {
+    let strSize = Buffer.byteLength(this.userId, 'utf-8');
+    return this.getHeaderSize() + 2 + strSize;
+  }
   ReceiveData(data: Buffer) {
     let index = this.getBodyIndex();
 
     let rIdx = new RefIdx(index);
     this.userId = this.readString(data, rIdx);
   }
-  SendData(data: Buffer, index: number = 0) {
-    if (index == 0) index = this.getBodyIndex();
-
-    this.writeString(data, this.userId, index);
+  SendData(): Buffer {
+    let data = Buffer.alloc(this.PacketSize());
+    let index = this.SendDataHeader(data);
+    let rIdx = new RefIdx(index);
+    this.writeString(data, this.userId, rIdx);
+    return data;
   }
 }
 // 로그아웃 응답
@@ -267,16 +353,22 @@ export class SAckLogout extends PacketBase {
     super(EPacket.Ack_logout);
     this.userId = userId;
   }
+  // 패킷 크기
+  PacketSize(): number {
+    let strSize = Buffer.byteLength(this.userId, 'utf-8');
+    return this.getHeaderSize() + 2 + strSize;
+  }
   ReceiveData(data: Buffer) {
     let index = this.getBodyIndex();
-
     let rIdx = new RefIdx(index);
     this.userId = this.readString(data, rIdx);
   }
-  SendData(data: Buffer, index: number = 0) {
-    if (index == 0) index = this.getBodyIndex();
-
-    this.writeString(data, this.userId, index);
+  SendData(): Buffer {
+    let data = Buffer.alloc(this.PacketSize());
+    let index = this.SendDataHeader(data);
+    let rIdx = new RefIdx(index);
+    this.writeString(data, this.userId, rIdx);
+    return data;
   }
 }
 // 로그아웃 통지
@@ -286,32 +378,73 @@ export class SNotifyLogout extends PacketBase {
     super(EPacket.Notify_logout);
     this.userId = userId;
   }
+  // 패킷 크기
+  PacketSize(): number {
+    let strSize = Buffer.byteLength(this.userId, 'utf-8');
+    return this.getHeaderSize() + 2 + strSize;
+  }
   ReceiveData(data: Buffer) {
     let index = this.getBodyIndex();
-
     let rIdx = new RefIdx(index);
     this.userId = this.readString(data, rIdx);
   }
-  SendData(data: Buffer, index: number = 0) {
-    if (index == 0) index = this.getBodyIndex();
-
-    this.writeString(data, this.userId, index);
+  SendData(): Buffer {
+    let data = Buffer.alloc(this.PacketSize());
+    let index = this.SendDataHeader(data);
+    let rIdx = new RefIdx(index);
+    this.writeString(data, this.userId, rIdx);
+    return data;
   }
 }
+
 // 유저정보 요청
 export class SReqUserInfo extends PacketBase {
-  userInfo: UserInfo = new UserInfo();
+  user: SOUser = new SOUser();
   constructor(userInfo: UserInfo) {
     super(EPacket.Req_userInfo);
-    this.userInfo.SetInfo(userInfo);
+    this.user.SetInfo(userInfo);
+  }
+  // 패킷 크기
+  PacketSize(): number {
+    let size = this.user.PacketSize();
+    return this.getHeaderSize() + size;
+  }
+  ReceiveData(data: Buffer) {
+    let index = this.getBodyIndex();
+    let rIdx = new RefIdx(index);
+    this.user.ReceiveData(data, rIdx);
+  }
+  SendData(): Buffer {
+    let data = Buffer.alloc(this.PacketSize());
+    let index = this.SendDataHeader(data);
+    let rIdx = new RefIdx(index);
+    this.user.SendData(data, rIdx);
+    return data;
   }
 }
 // 유저정보 응답
 export class SAckUserInfo extends PacketBase {
-  userInfo: UserInfo = new UserInfo();
+  user: SOUser = new SOUser();
   constructor(userInfo: UserInfo) {
     super(EPacket.Ack_userInfo);
-    this.userInfo.SetInfo(userInfo);
+    this.user.SetInfo(userInfo);
+  }
+  // 패킷 크기
+  PacketSize(): number {
+    let size = this.user.PacketSize();
+    return this.getHeaderSize() + size;
+  }
+  ReceiveData(data: Buffer) {
+    let index = this.getBodyIndex();
+    let rIdx = new RefIdx(index);
+    this.user.ReceiveData(data, rIdx);
+  }
+  SendData(): Buffer {
+    let data = Buffer.alloc(this.PacketSize());
+    let index = this.SendDataHeader(data);
+    let rIdx = new RefIdx(index);
+    this.user.SendData(data, rIdx);
+    return data;
   }
 }
 // 탈퇴 요청
@@ -321,16 +454,22 @@ export class SReqWithdraw extends PacketBase {
     super(EPacket.Req_withdraw);
     this.userId = userId;
   }
+  // 패킷 크기
+  PacketSize(): number {
+    let strSize = Buffer.byteLength(this.userId, 'utf-8');
+    return this.getHeaderSize() + 2 + strSize;
+  }
   ReceiveData(data: Buffer) {
     let index = this.getBodyIndex();
-
     let rIdx = new RefIdx(index);
     this.userId = this.readString(data, rIdx);
   }
-  SendData(data: Buffer, index: number = 0) {
-    if (index == 0) index = this.getBodyIndex();
-
-    this.writeString(data, this.userId, index);
+  SendData(): Buffer {
+    let data = Buffer.alloc(this.PacketSize());
+    let index = this.SendDataHeader(data);
+    let rIdx = new RefIdx(index);
+    this.writeString(data, this.userId, rIdx);
+    return data;
   }
 }
 // 탈퇴 응답
@@ -340,16 +479,22 @@ export class SAckWithdraw extends PacketBase {
     super(EPacket.Ack_withdraw);
     this.userId = userId;
   }
+  // 패킷 크기
+  PacketSize(): number {
+    let strSize = Buffer.byteLength(this.userId, 'utf-8');
+    return this.getHeaderSize() + 2 + strSize;
+  }
   ReceiveData(data: Buffer) {
     let index = this.getBodyIndex();
-
     let rIdx = new RefIdx(index);
     this.userId = this.readString(data, rIdx);
   }
-  SendData(data: Buffer, index: number = 0) {
-    if (index == 0) index = this.getBodyIndex();
-
-    this.writeString(data, this.userId, index);
+  SendData(): Buffer {
+    let data = Buffer.alloc(this.PacketSize());
+    let index = this.SendDataHeader(data);
+    let rIdx = new RefIdx(index);
+    this.writeString(data, this.userId, rIdx);
+    return data;
   }
 }
 // 룸리스트 정보 요청
@@ -359,16 +504,22 @@ export class SReqInitRoomList extends PacketBase {
     super(EPacket.Req_init_roomlist);
     this.userId = userId;
   }
+  // 패킷 크기
+  PacketSize(): number {
+    let strSize = Buffer.byteLength(this.userId, 'utf-8');
+    return this.getHeaderSize() + 2 + strSize;
+  }
   ReceiveData(data: Buffer) {
     let index = this.getBodyIndex();
-
     let rIdx = new RefIdx(index);
     this.userId = this.readString(data, rIdx);
   }
-  SendData(data: Buffer, index: number = 0) {
-    if (index == 0) index = this.getBodyIndex();
-
-    this.writeString(data, this.userId, index);
+  SendData(): Buffer {
+    let data = Buffer.alloc(this.PacketSize());
+    let index = this.SendDataHeader(data);
+    let rIdx = new RefIdx(index);
+    this.writeString(data, this.userId, rIdx);
+    return data;
   }
 }
 // 룸리스트 정보 요청
