@@ -150,15 +150,13 @@ export class PacketBase {
 
 // UserInfo에 통신 함수만 추가한 클래스
 export class SOUser extends UserInfo {
-  constructor() {
+  constructor(userInfo?: UserInfo) {
     super();
+    if (userInfo != undefined) this.SetInfo(userInfo);
   }
   // 패킷 크기
   PacketSize(): number {
-    let lenUserId = Buffer.byteLength(this.userId, 'utf-8');
-    let lenIp = Buffer.byteLength(this.ip, 'utf-8');
-    let lenPublicIp = Buffer.byteLength(this.publicIp, 'utf-8');
-    return lenUserId + 2 + lenIp + 2 + lenPublicIp + 2 + 4 + 4;
+    return this.GetPacketSize();
   }
 
   ReceiveData(data: Buffer, rIdx: RefIdx): void {
@@ -168,6 +166,7 @@ export class SOUser extends UserInfo {
     this.dataPort = data.readIntLE(rIdx.value, 4);
     rIdx.value += 4;
     this.movePort = data.readIntLE(rIdx.value, 4);
+    rIdx.value += 4;
   }
 
   SendData(data: Buffer, rIdx: RefIdx): void {
@@ -177,12 +176,109 @@ export class SOUser extends UserInfo {
     data.writeIntLE(this.dataPort, rIdx.value, 4);
     rIdx.value += 4;
     data.writeIntLE(this.movePort, rIdx.value, 4);
+    rIdx.value += 4;
+  }
+}
+
+export class SORoomPlayer extends RoomPlayer {
+  constructor() {
+    super();
+  }
+  // 패킷 크기
+  PacketSize(): number {
+    return this.GetPacketSize();
+  }
+
+  ReceiveData(data: Buffer, rIdx: RefIdx): void {
+    let bMaster = data.readIntLE(rIdx.value, 1);
+    rIdx.value += 1;
+    this.isMaster = bMaster == 1 ? true : false;
+    this.userState = data.readIntLE(rIdx.value, 4);
+    rIdx.value += 4;
+    this.slotNo = data.readIntLE(rIdx.value, 4);
+    rIdx.value += 4;
+    let bAlive = data.readIntLE(rIdx.value, 1);
+    rIdx.value += 1;
+    this.isAlive = bAlive == 1 ? true : false;
+    let kUser: SOUser = new SOUser();
+    kUser.ReceiveData(data, rIdx);
+    this.userInfo.SetInfo(kUser);
+  }
+
+  SendData(data: Buffer, rIdx: RefIdx): void {
+    data.writeIntLE(this.isMaster ? 1 : 0, rIdx.value, 1);
+    rIdx.value += 1;
+    data.writeIntLE(this.userState, rIdx.value, 4);
+    rIdx.value += 4;
+    data.writeIntLE(this.slotNo, rIdx.value, 4);
+    rIdx.value += 4;
+    data.writeIntLE(this.isAlive ? 1 : 0, rIdx.value, 1);
+    rIdx.value += 1;
+    const kUser: SOUser = new SOUser(this.userInfo);
+    kUser.SendData(data, rIdx);
   }
 }
 
 export class SORoom extends Room {
   constructor() {
     super();
+  }
+  // 패킷 크기
+  PacketSize(): number {
+    let lenRoomId = Buffer.byteLength(this.roomId, 'utf-8') + 2;
+    let lenMasterClientId = Buffer.byteLength(this.masterClientId, 'utf-8') + 2;
+    let etc = 1 + 4 + 1 + this.maxPlayer * 4; // boolean = 1byte
+    let playersLen = this.PlayerCount() * this.players[0].GetPacketSize();
+    return lenRoomId + lenMasterClientId + etc + playersLen;
+  }
+
+  ReceiveData(data: Buffer, rIdx: RefIdx): void {
+    if (this.players.length > 0) {
+      this.players.slice(0, this.players.length - 1);
+    }
+
+    this.roomId = CPacket.readString(data, rIdx);
+    this.masterClientId = CPacket.readString(data, rIdx);
+    this.maxPlayer = data.readIntLE(rIdx.value, 4);
+    let bOpen = data.readIntLE(rIdx.value, 1);
+    this.isOpen = bOpen == 1 ? true : false;
+    let bRemovedFromList = data.readIntLE(rIdx.value, 1);
+    this.removedFromList = bRemovedFromList == 1 ? true : false;
+    for (let i = 0; i < this.maxPlayer; i++) {
+      this.slots[i] = data.readIntLE(rIdx.value, 4);
+      rIdx.value += 4;
+    }
+    let playerLen = data.readIntLE(rIdx.value, 2);
+    for (let i = 0; i < playerLen; i++) {
+      const kPlayer: SORoomPlayer = new SORoomPlayer();
+      kPlayer.ReceiveData(data, rIdx);
+      let newPlayer = new RoomPlayer();
+      newPlayer.SetInfo(kPlayer);
+      this.players.push(newPlayer);
+    }
+  }
+
+  SendData(data: Buffer, rIdx: RefIdx): void {
+    CPacket.writeString(data, this.roomId, rIdx);
+    CPacket.writeString(data, this.masterClientId, rIdx);
+    data.writeIntLE(this.maxPlayer, rIdx.value, 4);
+    rIdx.value += 4;
+    data.writeIntLE(this.isOpen == true ? 1 : 0, rIdx.value, 1);
+    rIdx.value += 1;
+    data.writeIntLE(this.roomState, rIdx.value, 4);
+    rIdx.value += 4;
+    data.writeIntLE(this.removedFromList == true ? 1 : 0, rIdx.value, 1);
+    rIdx.value += 1;
+    for (let slot of this.slots) {
+      data.writeIntLE(slot, rIdx.value, 4);
+      rIdx.value += 4;
+    }
+    data.writeIntLE(this.players.length, rIdx.value, 2);
+    for (let item of this.players) {
+      const kPlayer = new SORoomPlayer();
+      kPlayer.SetInfo(item);
+      kPlayer.SendData(data, rIdx);
+    }
   }
 }
 

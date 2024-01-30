@@ -18,8 +18,8 @@ export class Room {
   isOpen: boolean;
   roomState: number;
   removedFromList: boolean;
-  players: RoomPlayer[];
   slots: number[];
+  players: RoomPlayer[];
 
   constructor(roomId: string = '', masterClientId: string = '', maxPlayer = 4) {
     this.roomId = roomId; // 룸id 또는 룸 이름
@@ -57,6 +57,21 @@ export class Room {
     this.roomState = 0;
     this.removedFromList = false;
     this.slots[0] = ERoomUserSate.Enter;
+  }
+
+  SetInfo(room: Room): void {
+    this.roomId = room.roomId;
+    this.masterClientId = room.masterClientId;
+    this.maxPlayer = room.maxPlayer;
+    this.isOpen = room.isOpen;
+    this.roomState = room.roomState;
+    this.removedFromList = room.removedFromList;
+    for (let i = 0; i < room.slots.length; i++) {
+      this.slots[i] = room.slots[i];
+    }
+    for (let i = 0; i < this.players.length; i++) {
+      this.players[i].SetInfo(room.players[i]);
+    }
   }
 
   // 비어있는 슬롯 인덱스 값
