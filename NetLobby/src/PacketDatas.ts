@@ -1,5 +1,6 @@
 import UserInfo from './UserInfo';
 import * as Lobby from './Lobby';
+import { IDictionary } from './Lobby';
 import Room from './Room';
 import RoomPlayer from './RoomPlayer';
 
@@ -620,14 +621,51 @@ export class SReqInitRoomList extends PacketBase {
 }
 // 룸리스트 정보 요청
 export class SAckInitRoomList extends PacketBase {
-  datas: Lobby.IDictionary<Room>;
-  constructor(datas: Lobby.IDictionary<Room>) {
+  datas: IDictionary<SORoom>;
+  constructor(datas?: IDictionary<SORoom>) {
     super(EPacket.Ack_init_roomlist);
-    this.datas = datas;
-    // for( let key in datas ) {
-    //    let kRoom = datas[key];
-    //    this.datas[key] = kRoom;
-    // }
+    if (datas != undefined) {
+      this.datas = datas;
+    } else {
+      this.datas = {};
+    }
+  }
+  // 패킷 크기
+  PacketSize(): number {
+    let size = this.getHeaderSize() + 2;
+    //const list = Object.values(this.datas);
+    for (let key in this.datas) {
+      size += this.datas[key].PacketSize();
+    }
+    return size;
+  }
+
+  ReceiveData(data: Buffer) {
+    let index = this.getBodyIndex();
+    let rIdx = new RefIdx(index);
+    let count = data.readIntLE(rIdx.value, 2);
+    rIdx.value += 2;
+    for (let i = 0; i < count; i++) {
+      let kRoom = new SORoom();
+      kRoom.ReceiveData(data, rIdx);
+      this.datas[kRoom.Name()] = kRoom;
+    }
+  }
+  SendData(): Buffer {
+    let data = Buffer.alloc(this.PacketSize());
+    let index = this.SendDataHeader(data);
+    let rIdx = new RefIdx(index);
+    let list = Object.values(this.datas);
+    data.writeIntLE(list.length, rIdx.value, 2);
+    for (let kRoom of list) {
+      kRoom.SendData(data, rIdx);
+    }
+    return data;
+  }
+
+  RemoveAll(): void {
+    // 객체의 모든 키를 가져와서 각각의 속성을 삭제
+    Object.keys(this.datas).forEach((key) => delete this.datas[key]);
   }
 }
 // 룸 생성 요청
@@ -639,23 +677,108 @@ export class SReqCreateRoom extends PacketBase {
     this.roomName = roomName;
     this.userId = userId;
   }
+  // 패킷 크기
+  PacketSize(): number {
+    let strSize = Buffer.byteLength(this.roomName, 'utf-8');
+    let strSize2 = Buffer.byteLength(this.userId, 'utf-8');
+    return this.getHeaderSize() + 2 + strSize + 2 + strSize2;
+  }
+  ReceiveData(data: Buffer) {
+    let index = this.getBodyIndex();
+    let rIdx = new RefIdx(index);
+    this.roomName = this.readString(data, rIdx);
+    this.userId = this.readString(data, rIdx);
+  }
+  SendData(): Buffer {
+    let data = Buffer.alloc(this.PacketSize());
+    let index = this.SendDataHeader(data);
+    let rIdx = new RefIdx(index);
+    this.writeString(data, this.roomName, rIdx);
+    this.writeString(data, this.userId, rIdx);
+    return data;
+  }
 }
 // 룸 생성 응답
 export class SAckCreateRoom extends PacketBase {
   success: number;
-  room?: Room;
-  constructor(success: number, room?: Room) {
+  room: SORoom;
+  constructor(success: number, room?: SORoom) {
     super(EPacket.Req_create_room);
     this.success = success;
-    this.room = room;
+    if (room != undefined) {
+      this.room = room;
+    } else {
+      this.room = new SORoom();
+    }
+  }
+  // 패킷 크기
+  PacketSize(): number {
+    let size = 4;
+    size += this.room.PacketSize();
+    return this.getHeaderSize() + size;
+  }
+  ReceiveData(data: Buffer) {
+    let index = this.getBodyIndex();
+
+    let rIdx = new RefIdx(index);
+    this.success = data.readIntLE(rIdx.value, 4);
+    this.room.ReceiveData(data, rIdx);
+  }
+  SendData(): Buffer {
+    let data = Buffer.alloc(this.PacketSize());
+    let index = this.SendDataHeader(data);
+    let rIdx = new RefIdx(index);
+    data.writeIntLE(this.success, rIdx.value, 4);
+    this.room.SendData(data, rIdx);
+    return data;
   }
 }
 // 룸 리스트 변경 통지
 export class SNotifyUpdateRoomList extends PacketBase {
-  datas: Lobby.IDictionary<Room>;
-  constructor(datas: Lobby.IDictionary<Room>) {
+  datas: IDictionary<SORoom>;
+  constructor(datas?: IDictionary<SORoom>) {
     super(EPacket.Notify_update_roomlist);
-    this.datas = datas;
+    if (datas != undefined) {
+      this.datas = datas;
+    } else {
+      this.datas = {};
+    }
+  }
+  // 패킷 크기
+  PacketSize(): number {
+    let size = this.getHeaderSize() + 2;
+    //const list = Object.values(this.datas);
+    for (let key in this.datas) {
+      size += this.datas[key].PacketSize();
+    }
+    return size;
+  }
+
+  ReceiveData(data: Buffer) {
+    let index = this.getBodyIndex();
+    let rIdx = new RefIdx(index);
+    let count = data.readIntLE(rIdx.value, 2);
+    rIdx.value += 2;
+    for (let i = 0; i < count; i++) {
+      let kRoom = new SORoom();
+      kRoom.ReceiveData(data, rIdx);
+      this.datas[kRoom.Name()] = kRoom;
+    }
+  }
+  SendData(): Buffer {
+    let data = Buffer.alloc(this.PacketSize());
+    let index = this.SendDataHeader(data);
+    let rIdx = new RefIdx(index);
+    let list = Object.values(this.datas);
+    data.writeIntLE(list.length, rIdx.value, 2);
+    for (let kRoom of list) {
+      kRoom.SendData(data, rIdx);
+    }
+    return data;
+  }
+  RemoveAll(): void {
+    // 객체의 모든 키를 가져와서 각각의 속성을 삭제
+    Object.keys(this.datas).forEach((key) => delete this.datas[key]);
   }
 }
 
@@ -668,24 +791,91 @@ export class SReqJoinRoom extends PacketBase {
     this.roomName = roomName;
     this.userId = userId;
   }
+  // 패킷 크기
+  PacketSize(): number {
+    let strSize = Buffer.byteLength(this.roomName, 'utf-8');
+    let strSize2 = Buffer.byteLength(this.userId, 'utf-8');
+    return this.getHeaderSize() + 2 + strSize + 2 + strSize2;
+  }
+
+  ReceiveData(data: Buffer) {
+    let index = this.getBodyIndex();
+    let rIdx = new RefIdx(index);
+    this.roomName = this.readString(data, rIdx);
+    this.userId = this.readString(data, rIdx);
+  }
+  SendData(): Buffer {
+    let data = Buffer.alloc(this.PacketSize());
+    let index = this.SendDataHeader(data);
+    let rIdx = new RefIdx(index);
+    this.writeString(data, this.roomName, rIdx);
+    this.writeString(data, this.userId, rIdx);
+    return data;
+  }
 }
 // 룸 가입 응답
 export class SAckJoinRoom extends PacketBase {
   success: number;
-  room?: Room;
-  constructor(success: number, room?: Room) {
+  room: SORoom;
+  constructor(success: number, room?: SORoom) {
     super(EPacket.Ack_join_room);
     this.success = success;
-    this.room = room;
+    if (room != undefined) {
+      this.room = room;
+    } else {
+      this.room = new SORoom();
+    }
+  }
+  // 패킷 크기
+  PacketSize(): number {
+    let size = 4;
+    size += this.room.PacketSize();
+    return this.getHeaderSize() + size;
+  }
+  ReceiveData(data: Buffer) {
+    let index = this.getBodyIndex();
+
+    let rIdx = new RefIdx(index);
+    this.success = data.readIntLE(rIdx.value, 4);
+    this.room.ReceiveData(data, rIdx);
+  }
+  SendData(): Buffer {
+    let data = Buffer.alloc(this.PacketSize());
+    let index = this.SendDataHeader(data);
+    let rIdx = new RefIdx(index);
+    data.writeIntLE(this.success, rIdx.value, 4);
+    this.room.SendData(data, rIdx);
+    return data;
   }
 }
 
 // 룸 입장 통지
 export class SNotifyEnterRoom extends PacketBase {
-  roomPlayer?: RoomPlayer;
-  constructor(roomPlayer?: RoomPlayer) {
+  roomPlayer: SORoomPlayer;
+  constructor(roomPlayer?: SORoomPlayer) {
     super(EPacket.Notify_enter_room);
-    this.roomPlayer = roomPlayer;
+    if (roomPlayer != undefined) {
+      this.roomPlayer = roomPlayer;
+    } else {
+      this.roomPlayer = new SORoomPlayer();
+    }
+  }
+  // 패킷 크기
+  PacketSize(): number {
+    let size = this.roomPlayer.PacketSize();
+    return this.getHeaderSize() + size;
+  }
+  ReceiveData(data: Buffer) {
+    let index = this.getBodyIndex();
+    let rIdx = new RefIdx(index);
+    this.roomPlayer.ReceiveData(data, rIdx);
+  }
+  SendData(): Buffer {
+    let data = Buffer.alloc(this.PacketSize());
+    let index = this.SendDataHeader(data);
+    let rIdx = new RefIdx(index);
+    this.roomPlayer.SendData(data, rIdx);
+    return data;
   }
 }
 
@@ -698,6 +888,27 @@ export class SReqLeaveRoom extends PacketBase {
     this.roomName = roomName;
     this.userId = userId;
   }
+  // 패킷 크기
+  PacketSize(): number {
+    let strSize = Buffer.byteLength(this.roomName, 'utf-8');
+    let strSize2 = Buffer.byteLength(this.userId, 'utf-8');
+    return this.getHeaderSize() + 2 + strSize + 2 + strSize2;
+  }
+
+  ReceiveData(data: Buffer) {
+    let index = this.getBodyIndex();
+    let rIdx = new RefIdx(index);
+    this.roomName = this.readString(data, rIdx);
+    this.userId = this.readString(data, rIdx);
+  }
+  SendData(): Buffer {
+    let data = Buffer.alloc(this.PacketSize());
+    let index = this.SendDataHeader(data);
+    let rIdx = new RefIdx(index);
+    this.writeString(data, this.roomName, rIdx);
+    this.writeString(data, this.userId, rIdx);
+    return data;
+  }
 }
 
 // 룸 나가기 응답
@@ -709,6 +920,26 @@ export class SAckLeaveRoom extends PacketBase {
     this.roomName = roomName;
     this.userId = userId;
   }
+  // 패킷 크기
+  PacketSize(): number {
+    let strSize = Buffer.byteLength(this.roomName, 'utf-8');
+    let strSize2 = Buffer.byteLength(this.userId, 'utf-8');
+    return this.getHeaderSize() + 2 + strSize + 2 + strSize2;
+  }
+  ReceiveData(data: Buffer) {
+    let index = this.getBodyIndex();
+    let rIdx = new RefIdx(index);
+    this.roomName = this.readString(data, rIdx);
+    this.userId = this.readString(data, rIdx);
+  }
+  SendData(): Buffer {
+    let data = Buffer.alloc(this.PacketSize());
+    let index = this.SendDataHeader(data);
+    let rIdx = new RefIdx(index);
+    this.writeString(data, this.roomName, rIdx);
+    this.writeString(data, this.userId, rIdx);
+    return data;
+  }
 }
 // 룸 나가기 통지
 export class SNotifyLeaveRoom extends PacketBase {
@@ -718,6 +949,27 @@ export class SNotifyLeaveRoom extends PacketBase {
     super(EPacket.Notify_leave_room);
     this.roomName = roomName;
     this.userId = userId;
+  }
+  // 패킷 크기
+  PacketSize(): number {
+    let strSize = Buffer.byteLength(this.roomName, 'utf-8');
+    let strSize2 = Buffer.byteLength(this.userId, 'utf-8');
+    return this.getHeaderSize() + 2 + strSize + 2 + strSize2;
+  }
+
+  ReceiveData(data: Buffer) {
+    let index = this.getBodyIndex();
+    let rIdx = new RefIdx(index);
+    this.roomName = this.readString(data, rIdx);
+    this.userId = this.readString(data, rIdx);
+  }
+  SendData(): Buffer {
+    let data = Buffer.alloc(this.PacketSize());
+    let index = this.SendDataHeader(data);
+    let rIdx = new RefIdx(index);
+    this.writeString(data, this.roomName, rIdx);
+    this.writeString(data, this.userId, rIdx);
+    return data;
   }
 }
 // 룸 Ready 요청
@@ -735,37 +987,50 @@ export class SReqRoomUserReady extends PacketBase {
     this.userId = userId;
     this.userState = userState;
   }
+  // 패킷 크기
+  PacketSize(): number {
+    let strSize = Buffer.byteLength(this.roomName, 'utf-8');
+    let strSize2 = Buffer.byteLength(this.userId, 'utf-8');
+    return this.getHeaderSize() + 2 + strSize + 2 + strSize2 + 4;
+  }
+
+  ReceiveData(data: Buffer) {
+    let index = this.getBodyIndex();
+    let rIdx = new RefIdx(index);
+    this.roomName = this.readString(data, rIdx);
+    this.userId = this.readString(data, rIdx);
+    this.userState = data.readIntLE(rIdx.value, 4);
+  }
+  SendData(): Buffer {
+    let data = Buffer.alloc(this.PacketSize());
+    let index = this.SendDataHeader(data);
+    let rIdx = new RefIdx(index);
+    this.writeString(data, this.roomName, rIdx);
+    this.writeString(data, this.userId, rIdx);
+    data.writeIntLE(this.userState, rIdx.value, 4);
+    return data;
+  }
 }
 // 룸 Ready 응답
-export class SAckRoomUserReady extends PacketBase {
-  roomName: string;
-  userId: string;
-  userState: number;
+export class SAckRoomUserReady extends SReqRoomUserReady {
   constructor(
     roomName: string = '',
     userId: string = '',
     userState: number = 0
   ) {
-    super(EPacket.Ack_room_ready);
-    this.roomName = roomName;
-    this.userId = userId;
-    this.userState = userState;
+    super(roomName, userId, userState);
+    this.id = EPacket.Ack_room_ready;
   }
 }
 // 룸 Ready 통지
-export class SNotifyRoomUserReady extends PacketBase {
-  roomName: string;
-  userId: string;
-  userState: number;
+export class SNotifyRoomUserReady extends SReqRoomUserReady {
   constructor(
     roomName: string = '',
     userId: string = '',
     userState: number = 0
   ) {
-    super(EPacket.Notify_room_ready);
-    this.roomName = roomName;
-    this.userId = userId;
-    this.userState = userState;
+    super(roomName, userId, userState);
+    this.id = EPacket.Notify_room_ready;
   }
 }
 
@@ -780,29 +1045,42 @@ export class SReqRoomChat extends PacketBase {
     this.userId = userId;
     this.msg = msg;
   }
+  // 패킷 크기
+  PacketSize(): number {
+    let strSize = Buffer.byteLength(this.roomName, 'utf-8');
+    let strSize2 = Buffer.byteLength(this.userId, 'utf-8');
+    let strSize3 = Buffer.byteLength(this.msg, 'utf-8');
+    return this.getHeaderSize() + 2 + strSize + 2 + strSize2 + 2 + strSize3;
+  }
+  ReceiveData(data: Buffer) {
+    let index = this.getBodyIndex();
+    let rIdx = new RefIdx(index);
+    this.roomName = this.readString(data, rIdx);
+    this.userId = this.readString(data, rIdx);
+    this.msg = this.readString(data, rIdx);
+  }
+  SendData(): Buffer {
+    let data = Buffer.alloc(this.PacketSize());
+    let index = this.SendDataHeader(data);
+    let rIdx = new RefIdx(index);
+    this.writeString(data, this.roomName, rIdx);
+    this.writeString(data, this.userId, rIdx);
+    this.writeString(data, this.msg, rIdx);
+    return data;
+  }
 }
 // 룸 chatting 응답
-export class SAckRoomChat extends PacketBase {
-  roomName: string;
-  userId: string;
-  msg: string;
+export class SAckRoomChat extends SReqRoomChat {
   constructor(roomName: string = '', userId: string = '', msg: string = '') {
-    super(EPacket.Ack_room_chat);
-    this.roomName = roomName;
-    this.userId = userId;
-    this.msg = msg;
+    super(roomName, userId, msg);
+    this.id = EPacket.Ack_room_chat;
   }
 }
 // 룸 chatting 통지
-export class SNotifyRoomChat extends PacketBase {
-  roomName: string;
-  userId: string;
-  msg: string;
+export class SNotifyRoomChat extends SReqRoomChat {
   constructor(roomName: string = '', userId: string = '', msg: string = '') {
-    super(EPacket.Notify_room_chat);
-    this.roomName = roomName;
-    this.userId = userId;
-    this.msg = msg;
+    super(roomName, userId, msg);
+    this.id = EPacket.Notify_room_chat;
   }
 }
 
@@ -815,15 +1093,32 @@ export class SReqGameStart extends PacketBase {
     this.roomName = roomName;
     this.userId = userId;
   }
+  // 패킷 크기
+  PacketSize(): number {
+    let strSize = Buffer.byteLength(this.roomName, 'utf-8');
+    let strSize2 = Buffer.byteLength(this.userId, 'utf-8');
+    return this.getHeaderSize() + 2 + strSize + 2 + strSize2;
+  }
+  ReceiveData(data: Buffer) {
+    let index = this.getBodyIndex();
+    let rIdx = new RefIdx(index);
+    this.roomName = this.readString(data, rIdx);
+    this.userId = this.readString(data, rIdx);
+  }
+  SendData(): Buffer {
+    let data = Buffer.alloc(this.PacketSize());
+    let index = this.SendDataHeader(data);
+    let rIdx = new RefIdx(index);
+    this.writeString(data, this.roomName, rIdx);
+    this.writeString(data, this.userId, rIdx);
+    return data;
+  }
 }
 // 게임시작 응답
-export class SAckGameStart extends PacketBase {
-  roomName: string;
-  userId: string;
+export class SAckGameStart extends SReqGameStart {
   constructor(roomName: string = '', userId: string = '') {
-    super(EPacket.Ack_game_start);
-    this.roomName = roomName;
-    this.userId = userId;
+    super(roomName, userId);
+    this.id = EPacket.Ack_game_start;
   }
 }
 // 게임시작 통지
@@ -843,15 +1138,32 @@ export class SReqGameEnd extends PacketBase {
     this.roomName = roomName;
     this.userId = userId;
   }
+  // 패킷 크기
+  PacketSize(): number {
+    let strSize = Buffer.byteLength(this.roomName, 'utf-8');
+    let strSize2 = Buffer.byteLength(this.userId, 'utf-8');
+    return this.getHeaderSize() + 2 + strSize + 2 + strSize2;
+  }
+  ReceiveData(data: Buffer) {
+    let index = this.getBodyIndex();
+    let rIdx = new RefIdx(index);
+    this.roomName = this.readString(data, rIdx);
+    this.userId = this.readString(data, rIdx);
+  }
+  SendData(): Buffer {
+    let data = Buffer.alloc(this.PacketSize());
+    let index = this.SendDataHeader(data);
+    let rIdx = new RefIdx(index);
+    this.writeString(data, this.roomName, rIdx);
+    this.writeString(data, this.userId, rIdx);
+    return data;
+  }
 }
 // 게임종료 응답
-export class SAckGameEnd extends PacketBase {
-  roomName: string;
-  userId: string;
+export class SAckGameEnd extends SReqGameEnd {
   constructor(roomName: string = '', userId: string = '') {
-    super(EPacket.Ack_game_end);
-    this.roomName = roomName;
-    this.userId = userId;
+    super(roomName, userId);
+    this.id = EPacket.Ack_game_end;
   }
 }
 // 게임종료 통지
@@ -861,6 +1173,25 @@ export class SNotifyGameEnd extends PacketBase {
     super(EPacket.Notify_game_end);
     this.end = end;
   }
+  // 패킷 크기
+  PacketSize(): number {
+    let size = 1;
+    return this.getHeaderSize() + size;
+  }
+  ReceiveData(data: Buffer) {
+    let index = this.getBodyIndex();
+
+    let rIdx = new RefIdx(index);
+    let kValue = data.readIntLE(rIdx.value, 1);
+    this.end = kValue == 0 ? false : true;
+  }
+  SendData(): Buffer {
+    let data = Buffer.alloc(this.PacketSize());
+    let index = this.SendDataHeader(data);
+    let rIdx = new RefIdx(index);
+    data.writeIntLE(this.end ? 1 : 0, rIdx.value, 1);
+    return data;
+  }
 }
 // 네트웍 연결해제 요청
 export class SReqDisconnect extends PacketBase {
@@ -869,11 +1200,38 @@ export class SReqDisconnect extends PacketBase {
     super(EPacket.Req_disconnect);
     this.userId = userId;
   }
+  // 패킷 크기
+  PacketSize(): number {
+    let strSize = Buffer.byteLength(this.userId, 'utf-8');
+    return this.getHeaderSize() + 2 + strSize;
+  }
+  ReceiveData(data: Buffer) {
+    let index = this.getBodyIndex();
+    let rIdx = new RefIdx(index);
+    this.userId = this.readString(data, rIdx);
+  }
+  SendData(): Buffer {
+    let data = Buffer.alloc(this.PacketSize());
+    let index = this.SendDataHeader(data);
+    let rIdx = new RefIdx(index);
+    this.writeString(data, this.userId, rIdx);
+    return data;
+  }
 }
 // 네트웍 연결해제 응답
 export class SAckDisconnect extends PacketBase {
   constructor() {
     super(EPacket.Req_disconnect);
+  }
+  // 패킷 크기
+  PacketSize(): number {
+    return this.getHeaderSize();
+  }
+  ReceiveData(data: Buffer) {}
+  SendData(): Buffer {
+    let data = Buffer.alloc(this.PacketSize());
+    this.SendDataHeader(data);
+    return data;
   }
 }
 

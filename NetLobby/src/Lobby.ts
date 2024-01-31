@@ -1,5 +1,3 @@
-"use strict"
-
 //const UserInfo = require('./UserInfo');
 //const Room = require('./Room');
 //const RoomPlayer = require('./RoomPlayer')
@@ -25,25 +23,23 @@ const DLOGIN_ALREADY_LOGIN = 3; // 이미 로그인중이다.
 
 //룸 상태 
 export const ERoomstate = {
-    Ready : 0,  // 대기상태 ( 입장가능 )
-    Game : 1    // 게임상태 ( 입장불가 )
+  Ready : 0,  // 대기상태 ( 입장가능 )
+  Game : 1    // 게임상태 ( 입장불가 )
 };
 
 const enum EJoinResult  {
-    Success = 0,
-    Fail_Room = 1,          // 룸없음
-    Fail_Gamming = 2,       // 게임중
-    Fail_MaxPlayer = 3,     // 최대플레이어 초과
-    Fail_SamePlayer = 4,    // 유저이름이 같은 유저가 접속함
+  Success = 0,
+  Fail_Room = 1,          // 룸없음
+  Fail_Gamming = 2,       // 게임중
+  Fail_MaxPlayer = 3,     // 최대플레이어 초과
+  Fail_SamePlayer = 4,    // 유저이름이 같은 유저가 접속함
 };
 
 
 // Dictionary 타입 정의
 export interface IDictionary<T> {
-  [key: string]: T;
+    [key: string]: T;
 }
-
-
 
 //
 //   로비
@@ -51,7 +47,6 @@ export interface IDictionary<T> {
 export class Lobby {
     lobbyUserList : IDictionary<UserInfo>;
     roomList : IDictionary<Room>;
-    
     mClients:net.Socket[] = [];
     mServer?:net.Server = undefined;
 
