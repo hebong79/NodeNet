@@ -4,6 +4,12 @@ import { IDictionary } from './Lobby';
 import Room from './Room';
 import RoomPlayer from './RoomPlayer';
 
+// 계정생성 정보
+export enum ECreateId {
+  Success = 0, // 성공
+  Fail = 1, // 실패
+}
+
 // 룸 상태
 export enum ERoomState {
   Ready = 0, // 게임 시작 전 상태
@@ -294,22 +300,25 @@ export class SOUserInfoList {
 // 계정생성 요청
 export class SReqCreateId extends PacketBase {
   userId: string;
-  success: number;
-  constructor(uesrId: string = '', success: number = 0) {
+  pass: string;
+  constructor(uesrId: string = '', pass: string = '') {
     super(EPacket.Req_createId);
     this.userId = uesrId;
-    this.success = success;
+    this.pass = pass;
   }
   // 패킷 크기
   PacketSize(): number {
     let strSize = Buffer.byteLength(this.userId, 'utf-8');
-    return this.getHeaderSize() + 2 + strSize + 4;
+    strSize += 2;
+    strSize += Buffer.byteLength(this.pass, 'utf-8');
+    strSize += 2;
+    return this.getHeaderSize() + strSize;
   }
   ReceiveData(data: Buffer) {
     let index = this.getBodyIndex();
     let rIdx = new RefIdx(index);
     this.userId = this.readString(data, rIdx);
-    this.success = data.readIntLE(rIdx.value, 4);
+    this.pass = this.readString(data, rIdx);
   }
   // 보내기 데이타 처리
   SendData(): Buffer {
@@ -317,7 +326,7 @@ export class SReqCreateId extends PacketBase {
     let index = this.SendDataHeader(data);
     let rIdx = new RefIdx(index);
     this.writeString(data, this.userId, rIdx);
-    data.writeIntLE(this.success, rIdx.value, 4);
+    this.writeString(data, this.pass, rIdx);
     return data;
   }
 }
@@ -360,7 +369,7 @@ export class SAckCreateId extends PacketBase {
 export class SReqLogin extends PacketBase {
   userId: string;
   pass: string;
-  constructor(userId: string, pass: string) {
+  constructor(userId: string = '', pass: string = '') {
     super(EPacket.Req_login);
     this.userId = userId;
     this.pass = pass;
@@ -444,62 +453,28 @@ export class SReqLogout extends PacketBase {
   }
 }
 // 로그아웃 응답
-export class SAckLogout extends PacketBase {
-  userId: string;
+export class SAckLogout extends SReqLogout {
   constructor(userId: string) {
-    super(EPacket.Ack_logout);
-    this.userId = userId;
-  }
-  // 패킷 크기
-  PacketSize(): number {
-    let strSize = Buffer.byteLength(this.userId, 'utf-8');
-    return this.getHeaderSize() + 2 + strSize;
-  }
-  ReceiveData(data: Buffer) {
-    let index = this.getBodyIndex();
-    let rIdx = new RefIdx(index);
-    this.userId = this.readString(data, rIdx);
-  }
-  SendData(): Buffer {
-    let data = Buffer.alloc(this.PacketSize());
-    let index = this.SendDataHeader(data);
-    let rIdx = new RefIdx(index);
-    this.writeString(data, this.userId, rIdx);
-    return data;
+    super(userId);
+    this.id = EPacket.Ack_logout;
   }
 }
 // 로그아웃 통지
-export class SNotifyLogout extends PacketBase {
-  userId: string;
+export class SNotifyLogout extends SReqLogout {
   constructor(userId: string) {
-    super(EPacket.Notify_logout);
-    this.userId = userId;
-  }
-  // 패킷 크기
-  PacketSize(): number {
-    let strSize = Buffer.byteLength(this.userId, 'utf-8');
-    return this.getHeaderSize() + 2 + strSize;
-  }
-  ReceiveData(data: Buffer) {
-    let index = this.getBodyIndex();
-    let rIdx = new RefIdx(index);
-    this.userId = this.readString(data, rIdx);
-  }
-  SendData(): Buffer {
-    let data = Buffer.alloc(this.PacketSize());
-    let index = this.SendDataHeader(data);
-    let rIdx = new RefIdx(index);
-    this.writeString(data, this.userId, rIdx);
-    return data;
+    super(userId);
+    this.id = EPacket.Notify_logout;
   }
 }
 
 // 유저정보 요청
 export class SReqUserInfo extends PacketBase {
   user: SOUser = new SOUser();
-  constructor(userInfo: UserInfo) {
+  constructor(userInfo?: UserInfo) {
     super(EPacket.Req_userInfo);
-    this.user.SetInfo(userInfo);
+    if (userInfo != undefined) {
+      this.user.SetInfo(userInfo);
+    }
   }
   // 패킷 크기
   PacketSize(): number {

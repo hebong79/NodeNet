@@ -13,6 +13,7 @@ import Room from "./Room";
 import { UserStorage } from "./UserStorage";
 import RoomPlayer from './RoomPlayer';
 import * as PacketDatas from './PacketDatas';
+import {ECreateId, ERoomState, EUserState, EPacket } from './PacketDatas';
 
 const storage = new UserStorage();  // 저장 리스트 정보
 
@@ -38,139 +39,218 @@ const enum EJoinResult  {
 
 // Dictionary 타입 정의
 export interface IDictionary<T> {
-    [key: string]: T;
+  [key: string]: T;
 }
 
 //
 //   로비
 //
 export class Lobby {
-    lobbyUserList : IDictionary<UserInfo>;
-    roomList : IDictionary<Room>;
-    mClients:net.Socket[] = [];
-    mServer?:net.Server = undefined;
+  lobbyUserList : IDictionary<UserInfo>;
+  roomList : IDictionary<Room>;
+  mClients:net.Socket[] = [];
+  mServer?:net.Server = undefined;
 
-    constructor() {
-        this.lobbyUserList = {};    // dictioary로 사용, 로비에 접속된 전체 유저 리스트 
-        this.roomList = {};         // 룸리스트
+  constructor() {
+      this.lobbyUserList = {};    // dictioary로 사용, 로비에 접속된 전체 유저 리스트 
+      this.roomList = {};         // 룸리스트
+  }
+
+  // 유저 데이타 초기화 하기 ( 가입유저 파일에서 열기 ) -----------
+  Init_UserData() {
+      storage.LoadFile();
+  }
+
+  // 클라이언트에게 데이터를 브로드캐스트
+  Broadcast<T>( client:net.Socket, data:Buffer) {
+      if( this.mServer != undefined ) {
+          this.mServer.getConnections((err, count) => {
+              console.log(`현재 연결된 클라이언트 수: ${count}`);
+          });
+      }
+      this.mClients.forEach((socket) => {
+          if (client !== socket && socket.writable) {
+              socket.write(data);
+          }
+      });
+  }
+  //계정생성 처리
+  Receive_CreateId( client:net.Socket, data : Buffer) {
+    let kData = new PacketDatas.SReqCreateId();
+      kData.ReceiveData(data);
+
+      //유저정보 추가
+      storage.PushData(kData.userId, kData.pass);
+      // 파일 저장
+      storage.SaveFile();
+      console.log('<create_id>\n', storage);
+      
+      const resUser = storage.FindUserData(kData.userId);
+      let nSuccess = ECreateId.Success; 
+      //존재하면 실패처리
+      if( resUser != undefined ){
+        nSuccess = ECreateId.Fail;
+      }
+      // 결과 전송
+      let kAck = new PacketDatas.SAckCreateId(kData.userId, nSuccess);
+      let kPacket =  kAck.SendData();
+      client.write( kPacket );
     }
+  // 로그인 처리
+  Receive_Login(  client:net.Socket, data : Buffer) {
+    let kData = new PacketDatas.SReqLogin();
+    kData.ReceiveData(data);
     
-    // 유저 데이타 초기화 하기 ( 가입유저 파일에서 열기 ) -----------
-    Init_UserData() {
-        storage.LoadFile();
+    //조건체크
+    const nRes = this.CheckLogin( kData.userId, kData.pass); 
+    if( nRes == 0 ) 
+    console.log(`<login> Login Success ★ ★ ,  ( id : ${kData.userId} ) `);
+    else
+    console.log(`<login> Login Failed ☎ ☎,  code : ${nRes}`);
+
+    // 성공여부 클라이언트에 전송
+    let ackLogin = new PacketDatas.SAckLogin(kData.userId, nRes);
+    let pakcket = ackLogin.SendData();
+    client.write( pakcket );
+  }
+
+  //로그아웃 응답
+  Receive_Logout(  cleint:net.Socket, data : Buffer) {
+  }
+
+  //유저정보 응답
+  Receive_UserInfo(  cleint:net.Socket, data : Buffer) {
+    const kData = new PacketDatas.SReqUserInfo();
+    kData.ReceiveData(data);
+      
+    // 유저가 존재하는지 체크
+    if( (kData.user.userId in this.lobbyUserList ) ) 
+      return;
+
+      let info = kData.user;
+    // dataPoat, movePort가 겹치면 +2씩 계속 증가시키기( while문 이용 )
+    const list = Object.values(this.lobbyUserList);
+    list.sort((a, b)=> (a.dataPort - b.dataPort));
+    for( var user of list ) {
+      if( user.ip == info.ip || user.publicIp == info.publicIp ) {
+        if( user.dataPort == info.dataPort ) 
+          info.dataPort += 1;
+        if( user.movePort == info.movePort )
+          info.movePort += 1;
+      }
     }
 
-    // 클라이언트에게 데이터를 브로드캐스트
-    Broadcast<T>( client:net.Socket, data:Buffer) {
-        if( this.mServer != undefined ) {
-            this.mServer.getConnections((err, count) => {
-                console.log(`현재 연결된 클라이언트 수: ${count}`);
-            });
-        }
-        this.mClients.forEach((socket) => {
-            if (client !== socket && socket.writable) {
-                socket.write(data);
-            }
-        });
-    }
-    
-    Receive_CreateId( cleint:net.Socket, data : Buffer) {
+    // 새로운 유저정보 등록
+    const newUser = new UserInfo(info.userId, info.ip, info.publicIp, info.dataPort, info.movePort);
+    this.lobbyUserList[info.userId] = newUser;
+    console.log(`lobbyUserList count = ${Object.keys(this.lobbyUserList).length}\n`);
+  }  
+  Receive_Withdraw(  cleint:net.Socket, data : Buffer) {
+  }
+  Receive_InitRoomList(  cleint:net.Socket, data : Buffer) {
 
-        let kData = new PacketDatas.SReqCreateId();
-        kData.ReceiveData(data);
+  }
+  Receive_CreateRoom(  cleint:net.Socket, data : Buffer) {
 
-        const resUser = storage.FindUserData(kData.userId);
-        if( resUser != undefined ){
+  }
+  Receive_JoinRoom( cleint:net.Socket,  data : Buffer) {
 
-            let kPacket = new PacketDatas.SAckCreateId(kData.userId, 1);
-            kPacket.SendData();
+  }
+  Receive_RoomReady(  cleint:net.Socket, data : Buffer) {
 
-            const packet = {'id':id, 'success': 1, 'socketId':socket.id};   // 이미 가입된 유저임
-            cleint.emit("ack_create_id", packet);
-            return;
-        }
-        //유저정보 추가
-        storage.PushData(id, pass);
-        
-        // 파일 저장
-        storage.SaveFile();
-    
-        console.log('<create_id>\n', storage);
-        const nRes = 0;
-        const packet = {'id':id, 'success': nRes, 'socketId':socket.id};  // 정상 가입됨
-        socket.emit("ack_create_id", packet);   
+  }
+  Receive_LeaveRoom( cleint:net.Socket,  data : Buffer) {
 
-    }
-    Receive_Login(  cleint:net.Socket, data : Buffer) {
-    }
-    Receive_Logout(  cleint:net.Socket, data : Buffer) {
-    }
-    Receive_UserInfo(  cleint:net.Socket, data : Buffer) {
-    }  
-    Receive_Withdraw(  cleint:net.Socket, data : Buffer) {
-    }
-    Receive_InitRoomList(  cleint:net.Socket, data : Buffer) {
+  }
+  Receive_RoomChat(  cleint:net.Socket, data : Buffer) {
 
-    }
-    Receive_CreateRoom(  cleint:net.Socket, data : Buffer) {
+  }
+  Receive_GameStart( cleint:net.Socket,  data : Buffer) {
 
-    }
-    Receive_JoinRoom( cleint:net.Socket,  data : Buffer) {
+  }
+  Receive_GameEnd(  cleint:net.Socket, data : Buffer) {
 
-    }
-    Receive_RoomReady(  cleint:net.Socket, data : Buffer) {
+  }
+  Receive_Disconnect(  cleint:net.Socket, data : Buffer) {
 
-    }
-    Receive_LeaveRoom( cleint:net.Socket,  data : Buffer) {
+  }
 
-    }
-    Receive_RoomChat(  cleint:net.Socket, data : Buffer) {
+  // 로그인 체크하기 --------------------------------
+  CheckLogin(id:string, pass:string) : number {
+    const findUser = storage.FindUserData(id);
 
-    }
-    Receive_GameStart( cleint:net.Socket,  data : Buffer) {
+    // 존재하지 않은 id
+    if( findUser == undefined)      return DLOGIN_NOT_ID;
+    // 패스워드 다름
+    if( findUser.pass != pass )     return DLOGIN_WRONG_PASS;
+    // 이미 로그인 중이다.   
+    if( findUser.id in this.lobbyUserList )    return DLOGIN_ALREADY_LOGIN;
 
-    }
-    Receive_GameEnd(  cleint:net.Socket, data : Buffer) {
+    // 성공
+    return DLOGIN_SUCCESS;
+  }
+  // 유저id로 유저 찾기
+  FindUser( userId : string ) : UserInfo | undefined {
+    if( userId in this.lobbyUserList )
+        return this.lobbyUserList[userId];
 
+    return undefined;
+  }
+  // // 소켓id로 유저 Id 찾기
+  // FindUserBySocketId( socketId:string ) {
+  //   const findUser = Object.values(this.lobbyUserList).find( (element, idx) => {
+  //       return (element.socketId == socketId);
+  //   });
+  //   if( findUser != undefined)
+  //       return findUser.userId;
+  //   return "";
+  // }
+  // 룸안에 있는 유저의 룸 찾기
+  FindRoomByUserId( userId:string ) : Room | undefined {
+    for( var key in this.roomList) {
+        var kRoom = this.roomList[key];
+        var kPlayer = kRoom.FindPlayer(userId);
+        if( kPlayer != undefined)
+            return kRoom;
     }
-    Receive_Disconnect(  cleint:net.Socket, data : Buffer) {
+    return undefined;
+  }
 
-    }
 }
 
 // 계정생성 응답 -----------------------------------------
-    Ack_CreateId =(socket:net.Socket, id:string, pass:string )=>{
-        const resUser = storage.FindUserData(id);
-        if( resUser != undefined ){
-            const packet = {'id':id, 'success': 1, 'socketId':socket.id};   // 이미 가입된 유저임
-            socket.emit("ack_create_id", packet);
-            return;
-        }
-        //유저정보 추가
-        storage.PushData(id, pass);
+    // Ack_CreateId =(socket:net.Socket, id:string, pass:string )=>{
+    //     const resUser = storage.FindUserData(id);
+    //     if( resUser != undefined ){
+    //         const packet = {'id':id, 'success': 1, 'socketId':socket.id};   // 이미 가입된 유저임
+    //         socket.emit("ack_create_id", packet);
+    //         return;
+    //     }
+    //     //유저정보 추가
+    //     storage.PushData(id, pass);
         
-        // 파일 저장
-        storage.SaveFile();
+    //     // 파일 저장
+    //     storage.SaveFile();
     
-        console.log('<create_id>\n', storage);
-        const nRes = 0;
-        const packet = {'id':id, 'success': nRes, 'socketId':socket.id};  // 정상 가입됨
-        socket.emit("ack_create_id", packet);   
-    };
-    // 로그인 응답 -----------------------------------------
-    Ack_Login (socket:net.Socket, id:string, pass:string) {
-        //조건체크
-        const nRes = this.CheckLogin( id, pass); 
+    //     console.log('<create_id>\n', storage);
+    //     const nRes = 0;
+    //     const packet = {'id':id, 'success': nRes, 'socketId':socket.id};  // 정상 가입됨
+    //     socket.emit("ack_create_id", packet);   
+    // };
+    // // 로그인 응답 -----------------------------------------
+    // Ack_Login (socket:net.Socket, id:string, pass:string) {
+    //     //조건체크
+    //     const nRes = this.CheckLogin( id, pass); 
 
-        if( nRes == 0 ) 
-        console.log(`<login> Login Success ★ ★ ,  ( id : ${id} ) `);
-        else
-        console.log(`<login> Login Failed ☎ ☎,  code : ${nRes}`);
+    //     if( nRes == 0 ) 
+    //     console.log(`<login> Login Success ★ ★ ,  ( id : ${id} ) `);
+    //     else
+    //     console.log(`<login> Login Failed ☎ ☎,  code : ${nRes}`);
 
-        // 성공여부 클라이언트에 전송
-        const packet = {'id':id, 'success':nRes};
-        socket.emit('ack_login', packet);
-    }
+    //     // 성공여부 클라이언트에 전송
+    //     const packet = {'id':id, 'success':nRes};
+    //     socket.emit('ack_login', packet);
+    // }
     // 유저정보 응답 (클라이언트에서 로그인 성공하면 호출해야 됨)----------------
     Ack_LobyUserInfo(socket:net.Socket, data : string ) {
         const info = JSON.parse(data);
@@ -425,46 +505,8 @@ export class Lobby {
         const packet = {"datas": Object.values(this.roomList)};
         socket.broadcast.emit('notify_update_roomlist', packet);
     }
-    // 로그인 체크하기 --------------------------------
-    CheckLogin(id:string, pass:string) {
-        const findUser = storage.FindUserData(id);
+
     
-        // 존재하지 않은 id
-        if( findUser == undefined)      return DLOGIN_NOT_ID;
-        // 패스워드 다름
-        if( findUser.pass != pass )     return DLOGIN_WRONG_PASS;
-        // 이미 로그인 중이다.   
-        if( findUser.id in this.lobbyUserList )    return DLOGIN_ALREADY_LOGIN;
-    
-        // 성공
-        return DLOGIN_SUCCESS;
-    }
-    // 유저id로 유저 찾기
-    FindUser( userId : string ) {
-        if( userId in this.lobbyUserList )
-            return this.lobbyUserList[userId];
-    
-        return undefined;
-    }
-    // 소켓id로 유저 Id 찾기
-    FindUserBySocketId( socketId:string ) {
-        const findUser = Object.values(this.lobbyUserList).find( (element, idx) => {
-            return (element.socketId == socketId);
-        });
-        if( findUser != undefined)
-            return findUser.userId;
-        return "";
-    }
-    // 룸안에 있는 유저의 룸 찾기
-    FindRoomByUserId( userId:string ) {
-        for( var key in this.roomList) {
-            var kRoom = this.roomList[key];
-            var kPlayer = kRoom.FindPlayer(userId);
-            if( kPlayer != undefined)
-                return kRoom;
-        }
-        return undefined;
-    }
   
 }
 
