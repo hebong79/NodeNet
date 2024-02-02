@@ -2,7 +2,7 @@
 import net from 'net';
 import RoomPlayer from './RoomPlayer';
 import UserInfo from './UserInfo';
-import { SORoomPlayer, SNotifyLeaveRoom } from './PacketDatas';
+import { SORoomPlayer, SNotifyLeaveRoom, SOUser } from './PacketDatas';
 
 //룸에서 유저상태 enum 상수
 const ERoomUserSate = {
@@ -47,7 +47,7 @@ export class Room {
   }
 
   // 룸 생성시 마스터 플레이어 정보 셋팅
-  Initialize(userInfo: UserInfo): void {
+  Initialize(userInfo: SOUser): void {
     const kPlayer = new RoomPlayer(true);
 
     kPlayer.userInfo = userInfo;
@@ -85,8 +85,8 @@ export class Room {
     return undefined;
   }
 
-  AddPlayer(userInfo: UserInfo): RoomPlayer {
-    const kPlayer = new RoomPlayer(false);
+  AddPlayer(userInfo: SOUser): SORoomPlayer {
+    const kPlayer = new SORoomPlayer(false);
     kPlayer.userInfo = userInfo;
     kPlayer.userState = ERoomUserSate.Enter; // 1 = Enter_State
 

@@ -1,3 +1,4 @@
+import net from 'net';
 import UserInfo from './UserInfo';
 import * as Lobby from './Lobby';
 import { IDictionary } from './Lobby';
@@ -157,9 +158,16 @@ export class PacketBase {
 
 // UserInfo에 통신 함수만 추가한 클래스
 export class SOUser extends UserInfo {
-  constructor(userInfo?: UserInfo) {
-    super();
-    if (userInfo != undefined) this.SetInfo(userInfo);
+  socket?: net.Socket;
+  constructor(
+    userId: string = '',
+    ip: string = '',
+    publicIp: string = '',
+    dataPort: number = 0,
+    movePort: number = 0
+  ) {
+    super(userId, ip, publicIp, dataPort, movePort);
+    this.socket = undefined;
   }
   // 패킷 크기
   PacketSize(): number {
@@ -188,8 +196,8 @@ export class SOUser extends UserInfo {
 }
 
 export class SORoomPlayer extends RoomPlayer {
-  constructor() {
-    super();
+  constructor(isMaster: boolean = false) {
+    super(isMaster);
   }
   // 패킷 크기
   PacketSize(): number {
@@ -207,9 +215,7 @@ export class SORoomPlayer extends RoomPlayer {
     let bAlive = data.readIntLE(rIdx.value, 1);
     rIdx.value += 1;
     this.isAlive = bAlive == 1 ? true : false;
-    let kUser: SOUser = new SOUser();
-    kUser.ReceiveData(data, rIdx);
-    this.userInfo.SetInfo(kUser);
+    this.userInfo.ReceiveData(data, rIdx);
   }
 
   SendData(data: Buffer, rIdx: RefIdx): void {
@@ -221,8 +227,7 @@ export class SORoomPlayer extends RoomPlayer {
     rIdx.value += 4;
     data.writeIntLE(this.isAlive ? 1 : 0, rIdx.value, 1);
     rIdx.value += 1;
-    const kUser: SOUser = new SOUser(this.userInfo);
-    kUser.SendData(data, rIdx);
+    this.userInfo.SendData(data, rIdx);
   }
 }
 
