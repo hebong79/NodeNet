@@ -2,6 +2,7 @@
 import net from 'net';
 import RoomPlayer from './RoomPlayer';
 import UserInfo from './UserInfo';
+import { SORoomPlayer, SNotifyLeaveRoom } from './PacketDatas';
 
 //룸에서 유저상태 enum 상수
 const ERoomUserSate = {
@@ -131,10 +132,16 @@ export class Room {
     return undefined;
   }
 
-  // // 룸 나간 유저 브로드 캐스팅하기
-  //  async SendLeaveRoomPlayer( socket:net.Socket, userId:string ) {
-  //    await socket.broadcast.to(this.roomId).emit('notify_leave_room', {"id": userId} );
-  //  }
+  // 룸 나간 유저 브로드 캐스팅하기
+  SendLeaveRoomPlayer(socket: net.Socket, userId: string) {
+    for (let kPlayer of this.players) {
+      if (kPlayer.Id() != userId) {
+        let kNotiData = new SNotifyLeaveRoom(this.roomId, kPlayer.Id());
+        let packet = kNotiData.SendData();
+        socket.write(packet);
+      }
+    }
+  }
 
   // 슬롯 0으로 초기화하기
   ClearSlot(): void {

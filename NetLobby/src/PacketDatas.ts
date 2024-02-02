@@ -227,8 +227,8 @@ export class SORoomPlayer extends RoomPlayer {
 }
 
 export class SORoom extends Room {
-  constructor() {
-    super();
+  constructor(roomId: string = '', masterClientId: string = '', maxPlayer = 4) {
+    super(roomId, masterClientId, maxPlayer);
   }
   // 패킷 크기
   PacketSize(): number {
@@ -429,7 +429,7 @@ export class SAckLogin extends PacketBase {
 // 로그아웃 요청
 export class SReqLogout extends PacketBase {
   userId: string;
-  constructor(userId: string) {
+  constructor(userId: string = '') {
     super(EPacket.Req_logout);
     this.userId = userId;
   }
@@ -440,7 +440,6 @@ export class SReqLogout extends PacketBase {
   }
   ReceiveData(data: Buffer) {
     let index = this.getBodyIndex();
-
     let rIdx = new RefIdx(index);
     this.userId = this.readString(data, rIdx);
   }
@@ -454,14 +453,14 @@ export class SReqLogout extends PacketBase {
 }
 // 로그아웃 응답
 export class SAckLogout extends SReqLogout {
-  constructor(userId: string) {
+  constructor(userId: string = '') {
     super(userId);
     this.id = EPacket.Ack_logout;
   }
 }
 // 로그아웃 통지
 export class SNotifyLogout extends SReqLogout {
-  constructor(userId: string) {
+  constructor(userId: string = '') {
     super(userId);
     this.id = EPacket.Notify_logout;
   }
@@ -522,7 +521,7 @@ export class SAckUserInfo extends PacketBase {
 // 탈퇴 요청
 export class SReqWithdraw extends PacketBase {
   userId: string;
-  constructor(userId: string) {
+  constructor(userId: string = '') {
     super(EPacket.Req_withdraw);
     this.userId = userId;
   }
@@ -572,7 +571,7 @@ export class SAckWithdraw extends PacketBase {
 // 룸리스트 정보 요청
 export class SReqInitRoomList extends PacketBase {
   userId: string;
-  constructor(userId: string) {
+  constructor(userId: string = '') {
     super(EPacket.Req_init_roomlist);
     this.userId = userId;
   }
@@ -630,7 +629,7 @@ export class SAckInitRoomList extends PacketBase {
     let data = Buffer.alloc(this.PacketSize());
     let index = this.SendDataHeader(data);
     let rIdx = new RefIdx(index);
-    let list = Object.values(this.datas);
+    let list: SORoom[] = Object.values(this.datas);
     data.writeIntLE(list.length, rIdx.value, 2);
     for (let kRoom of list) {
       kRoom.SendData(data, rIdx);
@@ -647,7 +646,7 @@ export class SAckInitRoomList extends PacketBase {
 export class SReqCreateRoom extends PacketBase {
   roomName: string;
   userId: string;
-  constructor(roomName: string, userId: string) {
+  constructor(roomName: string = '', userId: string = '') {
     super(EPacket.Req_create_room);
     this.roomName = roomName;
     this.userId = userId;
@@ -744,7 +743,7 @@ export class SNotifyUpdateRoomList extends PacketBase {
     let data = Buffer.alloc(this.PacketSize());
     let index = this.SendDataHeader(data);
     let rIdx = new RefIdx(index);
-    let list = Object.values(this.datas);
+    let list: SORoom[] = Object.values(this.datas);
     data.writeIntLE(list.length, rIdx.value, 2);
     for (let kRoom of list) {
       kRoom.SendData(data, rIdx);
@@ -761,7 +760,7 @@ export class SNotifyUpdateRoomList extends PacketBase {
 export class SReqJoinRoom extends PacketBase {
   roomName: string;
   userId: string;
-  constructor(roomName: string, userId: string) {
+  constructor(roomName: string = '', userId: string = '') {
     super(EPacket.Req_join_room);
     this.roomName = roomName;
     this.userId = userId;

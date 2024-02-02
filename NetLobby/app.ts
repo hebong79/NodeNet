@@ -161,7 +161,7 @@ const server = net.createServer((client: net.Socket) => {
         mLobby.Receive_LeaveRoom(client, data);
         break;
       case Packets.EPacket.Req_room_ready:
-        mLobby.Receive_RoomReady(client, data);
+        mLobby.Receive_RoomUserReady(client, data);
         break;
       case Packets.EPacket.Req_room_chat:
         mLobby.Receive_RoomChat(client, data);
