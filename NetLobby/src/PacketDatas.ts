@@ -1063,11 +1063,11 @@ export class SNotifyRoomChat extends SReqRoomChat {
     this.id = EPacket.Notify_room_chat;
   }
 }
-export class SReqChangeMaster extends PacketBase {
+export class SNotifyChangeMaster extends PacketBase {
   roomName: string;
   userId: string;
   constructor(roomName: string = '', userId: string = '') {
-    super(EPacket.Req_game_start);
+    super(EPacket.Notify_change_master);
     this.roomName = roomName;
     this.userId = userId;
   }
@@ -1137,6 +1137,25 @@ export class SNotifyGameStart extends PacketBase {
   constructor(start: boolean = true) {
     super(EPacket.Notify_game_start);
     this.start = start;
+  }
+  // 패킷 크기
+  PacketSize(): number {
+    let size = 1;
+    return this.getHeaderSize() + size;
+  }
+  ReceiveData(data: Buffer) {
+    let index = this.getBodyIndex();
+
+    let rIdx = new RefIdx(index);
+    let kValue = data.readIntLE(rIdx.value, 1);
+    this.start = kValue == 0 ? false : true;
+  }
+  SendData(): Buffer {
+    let data = Buffer.alloc(this.PacketSize());
+    let index = this.SendDataHeader(data);
+    let rIdx = new RefIdx(index);
+    data.writeIntLE(this.start ? 1 : 0, rIdx.value, 1);
+    return data;
   }
 }
 // 게임종료 요청
