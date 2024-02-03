@@ -294,23 +294,107 @@ export class Lobby {
     let kData = new PacketDatas.SReqRoomUserReady();
     kData.ReceiveData(data);
 
+    let roomName = kData.roomName;
+    let userId = kData.userId;
+    let userState = kData.userState;
+    
+    const kRoom = this.roomList[roomName];
+    const kPlayer = kRoom.FindPlayer(userId);
+    if( kPlayer != undefined)
+        kPlayer.userState = userState;
+
+    console.log(userId, 'State : ', userState);
+
+    //브로드 캐스트 room ready
+    let kNotiData = new PacketDatas.SNotifyRoomUserReady(roomName, userId, userState);
+    let packet : Buffer = kNotiData.SendData();
+    this.BroadcastInRoom(client, packet, roomName);
+    //socket.broadcast.to(roomName).emit('notify_room_ready', {"id": userId,"userState":userState} );
   }
+
   //룸 떠나기 응답
   Receive_LeaveRoom(client:net.Socket,  data : Buffer) {
+    let kData = new PacketDatas.SReqLeaveRoom();
+    kData.ReceiveData(data);
 
+    let userId = kData.userId;
+    let roomName = kData.roomName;
+
+    let kNotiData = new PacketDatas.SNotifyLeaveRoom(roomName, userId);
+    let notiPacket : Buffer = kNotiData.SendData();
+    this.BroadcastInRoom(client, notiPacket, roomName);
+    //socket.broadcast.to(roomName).emit('notify_leave_room', {"id": userId} );
+    //socket.leave(roomName);
+    //룸에서 유저 제거
+    const kRoom : SORoom = this.roomList[roomName];
+    kRoom.RemovePlayer(userId);
+
+    console.log("Leave room user id = ", userId);
+    console.log("room player count = ", kRoom.PlayerCount());
+
+    //로비에 있는 유저들에게 알림
+    if( kRoom.PlayerCount() == 0 ) {
+        kRoom.removedFromList = true;
+        let kNotiRoomList = new PacketDatas.SNotifyUpdateRoomList(this.roomList);
+        let packet2 = kNotiRoomList.SendData();
+        this.Broadcast(client, packet2);
+        //await socket.broadcast.emit('notify_update_roomlist', {'datas': Object.values(this.roomList)});
+        delete this.roomList[roomName];
+    }
+    else{
+        //마스터가 방을 나가면 방장 인계
+        if ( kRoom.masterClientId == userId ) {
+            let kPlayer = kRoom.FirstPlayer() as RoomPlayer;
+            if( kPlayer == undefined ) return;
+
+            kRoom.masterClientId = kPlayer.Name();
+            kPlayer.isMaster = true;
+            console.log('master id = ', kPlayer.Name());
+
+            let kNCMaster = new PacketDatas.SNotifyChangeMaster(roomName, userId);
+            let packet3 = kNCMaster.SendData();
+            this.BroadcastInRoom(client, packet3, roomName);
+            // const changePacket = {"masterId": kPlayer.Name()};
+            // await socket.broadcast.to(roomName).emit('notify_room_change_master', changePacket );
+        }
+        this.SendUpdateRoomList(client);
+    }
   }
+
   // 룽 채팅 응답
   Receive_RoomChat(client:net.Socket, data : Buffer) {
+    let kData = new PacketDatas.SReqRoomChat();
+    kData.ReceiveData(data);
 
+    let userId = kData.userId;
+    let msg = kData.msg;
+    let roomName = kData.roomName;
+
+    console.log('룸 채팅요청', userId, msg);
+
+    //요청에 대한 응답 보내기
+    const kAckData = new PacketDatas.SAckRoomChat(roomName, userId, msg);
+    let packet = kAckData.SendData();
+    client.write(packet);
+
+    // chat msg를 본인을 제외한 모든유저에게 보낸다.
+    const kNotiData = new PacketDatas.SNotifyRoomChat(roomName, userId, msg);
+    let packet2 = kNotiData.SendData();
+    this.BroadcastInRoom(client, packet2, roomName);
   }
   // 게임 시작 응답
   Receive_GameStart(client:net.Socket,  data : Buffer) {
+    let kData = new PacketDatas.SReqGameStart();
+    kData.ReceiveData(data);
 
 
   }
 
   // 게임 종료 응답
   Receive_GameEnd(client:net.Socket, data : Buffer) {
+    let kData = new PacketDatas.SReqGameEnd();
+    kData.ReceiveData(data);
+
 
   }
 
@@ -321,19 +405,19 @@ export class Lobby {
     const userId = kData.userId;
     //유저가 룸에 속해있으면 룸에서 삭제
     if( userId != undefined) {
-        var kRoom = this.FindRoomByUserId(userId);       // 유저가 속해있는 룸 검색
-        if( kRoom != undefined){
-            kRoom.RemovePlayer(userId);                 // 룸에서 유저 삭제
-            kRoom.SendLeaveRoomPlayer(client, userId ); // 룸 유저 삭제 - 모든유저에게 전송
-            if( kRoom.PlayerCount() == 0 ) {
-                kRoom.removedFromList = true;
-                this.SendUpdateRoomList(client);
-                delete this.roomList[kRoom.Name()];
-            }
-            else {
-                this.SendUpdateRoomList(client);                 //로비유저의 룸리스트 정보 갱신
-            }
+      var kRoom = this.FindRoomByUserId(userId);       // 유저가 속해있는 룸 검색
+      if( kRoom != undefined){
+        kRoom.RemovePlayer(userId);                 // 룸에서 유저 삭제
+        kRoom.SendLeaveRoomPlayer(client, userId ); // 룸 유저 삭제 - 모든유저에게 전송
+        if( kRoom.PlayerCount() == 0 ) {
+          kRoom.removedFromList = true;
+          this.SendUpdateRoomList(client);
+          delete this.roomList[kRoom.Name()];
         }
+        else {
+          this.SendUpdateRoomList(client);                 //로비유저의 룸리스트 정보 갱신
+        }
+      }
     }
     this.LogoutUser(client, userId );
     //console.log('user count =', Object.keys(this.lobbyUserList).length);
@@ -360,15 +444,7 @@ export class Lobby {
 
     return undefined;
   }
-  // // 소켓id로 유저 Id 찾기
-  // FindUserBySocketId( socketId:string ) {
-  //   const findUser = Object.values(this.lobbyUserList).find( (element, idx) => {
-  //       return (element.socketId == socketId);
-  //   });
-  //   if( findUser != undefined)
-  //       return findUser.userId;
-  //   return "";
-  // }
+  
   // 룸안에 있는 유저의 룸 찾기
   FindRoomByUserId( userId:string ) : Room | undefined {
     for( var key in this.roomList) {
@@ -499,30 +575,30 @@ export class Lobby {
     // //console.log('user count =', Object.keys(this.lobbyUserList).length);
     // }
     // 가입탈퇴시 응답 -----------------------------------------
-    Ack_Withdraw(socket:net.Socket, id:string) {
-    if( storage.RemoveUserData(id) == true)
-    storage.SaveFile();
+    // Ack_Withdraw(socket:net.Socket, id:string) {
+    // if( storage.RemoveUserData(id) == true)
+    // storage.SaveFile();
 
-    this.LogoutUser(socket, id);
-    }
+    // this.LogoutUser(socket, id);
+    // }
     // 로그아웃 후 처리 ( param : 유저 id ) ----------------
-    LogoutUser(socket:net.Socket, id:string) {
-    if( id in this.lobbyUserList ) {
-        delete this.lobbyUserList[id];
-    }
-    console.log('user count =', Object.keys(this.lobbyUserList).length);
-    }
+    // LogoutUser(socket:net.Socket, id:string) {
+    // if( id in this.lobbyUserList ) {
+    //     delete this.lobbyUserList[id];
+    // }
+    // console.log('user count =', Object.keys(this.lobbyUserList).length);
+    // }
     // 로비채팅 응답 --------------------------------------------
-    Ack_LobbyChat(socket:net.Socket, userId:string, msg:string) {
-    console.log('채팅요청', userId, msg);
+    // Ack_LobbyChat(socket:net.Socket, userId:string, msg:string) {
+    // console.log('채팅요청', userId, msg);
 
-    //요청에 대한 응답 보내기
-    let packet = {userId:userId, msg:msg};
-    socket.emit('ack_lobby_chat', packet);
+    // //요청에 대한 응답 보내기
+    // let packet = {userId:userId, msg:msg};
+    // socket.emit('ack_lobby_chat', packet);
 
-    // chat msg를 본인을 제외한 모든유저에게 보낸다.
-    socket.broadcast.emit('notify_lobby_chat', packet );
-    }
+    // // chat msg를 본인을 제외한 모든유저에게 보낸다.
+    // socket.broadcast.emit('notify_lobby_chat', packet );
+    // }
 
     // // 룸 리스트 응답 ---------------------------------------
     // Ack_InitRoomList(socket:net.Socket, userId:string) {
@@ -603,52 +679,52 @@ export class Lobby {
     // };
 
     // 룸 나가기 ------------------------------------------
-    async Ack_LeaveRoom(socket:net.Socket, roomName:string, userId:string) {
+    // async Ack_LeaveRoom(socket:net.Socket, roomName:string, userId:string) {
 
-      await socket.broadcast.to(roomName).emit('notify_leave_room', {"id": userId} );
-      //io.to(roomName).emit('leave_room', {"id": userId} );
+    //   await socket.broadcast.to(roomName).emit('notify_leave_room', {"id": userId} );
+    //   //io.to(roomName).emit('leave_room', {"id": userId} );
 
-      socket.leave(roomName);
+    //   socket.leave(roomName);
 
-      const kRoom : Room = this.roomList[roomName];
-      kRoom.RemovePlayer(userId);
+    //   const kRoom : Room = this.roomList[roomName];
+    //   kRoom.RemovePlayer(userId);
 
-      console.log("Leave room user id = ", userId);
-      console.log("room player count = ", kRoom.PlayerCount());
+    //   console.log("Leave room user id = ", userId);
+    //   console.log("room player count = ", kRoom.PlayerCount());
 
-      //로비에 있는 유저들에게 알림
-      if( kRoom.PlayerCount() == 0 ) {
-          kRoom.removedFromList = true;
-          await socket.broadcast.emit('notify_update_roomlist', {'datas': Object.values(this.roomList)});
-          delete this.roomList[roomName];
-      }
-      else{
-          //마스터가 방을 나가면 방장 인계
-          if ( kRoom.masterClientId == userId ) {
-              let kPlayer = kRoom.FirstPlayer() as RoomPlayer;
-              if( kPlayer == undefined ) return;
+    //   //로비에 있는 유저들에게 알림
+    //   if( kRoom.PlayerCount() == 0 ) {
+    //       kRoom.removedFromList = true;
+    //       await socket.broadcast.emit('notify_update_roomlist', {'datas': Object.values(this.roomList)});
+    //       delete this.roomList[roomName];
+    //   }
+    //   else{
+    //       //마스터가 방을 나가면 방장 인계
+    //       if ( kRoom.masterClientId == userId ) {
+    //           let kPlayer = kRoom.FirstPlayer() as RoomPlayer;
+    //           if( kPlayer == undefined ) return;
 
-              kRoom.masterClientId = kPlayer.Name();
-              kPlayer.isMaster = true;
-              console.log('master id = ', kPlayer.Name());
-              const changePacket = {"masterId": kPlayer.Name()};
-              await socket.broadcast.to(roomName).emit('notify_room_change_master', changePacket );
-          }
+    //           kRoom.masterClientId = kPlayer.Name();
+    //           kPlayer.isMaster = true;
+    //           console.log('master id = ', kPlayer.Name());
+    //           const changePacket = {"masterId": kPlayer.Name()};
+    //           await socket.broadcast.to(roomName).emit('notify_room_change_master', changePacket );
+    //       }
 
-          this.SendUpdateRoomList(socket);
-      }
-    }
+    //       this.SendUpdateRoomList(socket);
+    //   }
+    // }
 
-    // 룸에서 Ready 상태 응답 --------------------------------
-    Ack_RoomUserReady(socket:net.Socket, roomName:string, userId:string, userState:number){
-    const kRoom = this.roomList[roomName];
-    const kPlayer = kRoom.FindPlayer(userId);
-    if( kPlayer != undefined)
-        kPlayer.userState = userState;
+    // // 룸에서 Ready 상태 응답 --------------------------------
+    // Ack_RoomUserReady(socket:net.Socket, roomName:string, userId:string, userState:number){
+    // const kRoom = this.roomList[roomName];
+    // const kPlayer = kRoom.FindPlayer(userId);
+    // if( kPlayer != undefined)
+    //     kPlayer.userState = userState;
 
-    console.log(userId, 'State : ', userState);
-    socket.broadcast.to(roomName).emit('notify_room_ready', {"id": userId,"userState":userState} );
-    }
+    // console.log(userId, 'State : ', userState);
+    // socket.broadcast.to(roomName).emit('notify_room_ready', {"id": userId,"userState":userState} );
+    // }
 
     // 룸내에서 채팅하기 응답 --------------------------------
     Ack_RoomChat(socket:net.Socket, roomName:string, userId:string, msg:string) {

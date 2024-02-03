@@ -53,6 +53,7 @@ export enum EPacket {
   Req_room_chat, // 룸 챗팅 요청
   Ack_room_chat, // 룸 챗팅 응답
   Notify_room_chat, // 룸 챗팅 통지
+  Notify_change_master, // 룸마스터 변경
   Req_game_start, // 게임시작 요청
   Ack_game_start, // 게임시작 응답
   Notify_game_start, // 게임시작 통지
@@ -1061,6 +1062,36 @@ export class SNotifyRoomChat extends SReqRoomChat {
     super(roomName, userId, msg);
     this.id = EPacket.Notify_room_chat;
   }
+}
+export class SReqChangeMaster extends PacketBase {
+  roomName: string;
+  userId: string;
+  constructor(roomName: string = '', userId: string = '') {
+    super(EPacket.Req_game_start);
+    this.roomName = roomName;
+    this.userId = userId;
+  }
+  // 패킷 크기
+  PacketSize(): number {
+    let strSize = Buffer.byteLength(this.roomName, 'utf-8');
+    let strSize2 = Buffer.byteLength(this.userId, 'utf-8');
+    return this.getHeaderSize() + 2 + strSize + 2 + strSize2;
+  }
+  ReceiveData(data: Buffer) {
+    let index = this.getBodyIndex();
+    let rIdx = new RefIdx(index);
+    this.roomName = this.readString(data, rIdx);
+    this.userId = this.readString(data, rIdx);
+  }
+  SendData(): Buffer {
+    let data = Buffer.alloc(this.PacketSize());
+    let index = this.SendDataHeader(data);
+    let rIdx = new RefIdx(index);
+    this.writeString(data, this.roomName, rIdx);
+    this.writeString(data, this.userId, rIdx);
+    return data;
+  }
+
 }
 
 // 게임시작 요청
