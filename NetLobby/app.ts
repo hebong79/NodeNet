@@ -34,6 +34,8 @@ const mLobby = new Lobby(); // 로비
 const mClients: net.Socket[] = []; // 클라이언트(소캣)리스트
 //const _PID:number = 0x7e21;          // 프리픽스 ID 값 : ~, !
 
+
+
 // 로비에서 처리할 일 1
 // - 계정생성
 // - 로그인
