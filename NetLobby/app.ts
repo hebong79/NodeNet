@@ -5,6 +5,11 @@
 // 1. cmd 창에서  curl ifconfig.me 또는 curl ipinfo.io
 // 2. 크롬에서 "What is my IP"로 검색
 
+/*
+  순수 TCP 소켓으로 만든 로비 서버 ( socketio 사용 안함 )
+
+*/
+
 import * as net from 'net';
 import { Buffer } from 'node:buffer';
 
